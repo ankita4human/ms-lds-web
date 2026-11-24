@@ -1,0 +1,16 @@
+﻿# build output
+bin/
+obj/
+node_modules/
+client/dist/
+*.user
+.vs/
+# secrets and local config
+appsettings.Development.json
+appsettings.Local.json
+.env
+.env.*
+*.pfx
+# schema dumps with real data
+*.bak
+MS_QDS_Database_Schema.sql
