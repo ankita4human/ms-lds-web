@@ -6,9 +6,10 @@ import { useLang } from './LangContext';
 import { TopProgress } from './components/Loader';
 import ChatBot from './components/ChatBot';
 import NotificationBell from './components/NotificationBell';
-import { IconChart, IconDash, IconDocs, IconFilter, IconGear, IconType, IconUsers, IconMail, IconLogout, IconSearch, IconStd, IconDep } from './components/Icons';
+import UserAvatar from './components/UserAvatar';
+import { IconChart, IconDash, IconDocs, IconFilter, IconGear, IconType, IconUsers, IconMail, IconLogout, IconSearch, IconStd, IconDep, IconFlow, IconTask, IconCatch, IconTag, IconSliders } from './components/Icons';
 
-const TITLES: Record<string, string> = { '/': 'Dashboard', '/analytics': 'Analytics', '/documents': 'Documents' };
+const TITLES: Record<string, string> = { '/tasks': 'My tasks', '/options/workflows': 'Workflow management', '/options/catch': 'Catch management', '/options/tags': 'Tags', '/options/program': 'Program options', '/': 'Dashboard', '/analytics': 'Analytics', '/documents': 'Documents' };
 const KEY = 'pl_nav_collapsed';
 
 export default function Shell() {
@@ -17,6 +18,10 @@ export default function Shell() {
   const { lang, setLang, languages } = useLang();
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
   const stdOpt = useQuery({ queryKey: ['std-options'], queryFn: api.standardOptions, staleTime: 5 * 60_000 });
+  const wfCfg = useQuery({ queryKey: ['wf-config'], queryFn: api.wfConfig, staleTime: 5 * 60_000 });
+  const catchCfg = useQuery({ queryKey: ['catch-config'], queryFn: api.catchConfig, staleTime: 5 * 60_000 });
+  const wfCount = useQuery({ queryKey: ['wf-summary'], queryFn: api.wfSummary, enabled: !!wfCfg.data?.canUse, refetchInterval: 30_000, refetchOnWindowFocus: true, staleTime: 10_000 });
+  const openTasks = wfCount.data?.total ?? 0;
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem(KEY) === '1');
   const [menuOpen, setMenuOpen] = useState(false);
   const [optOpen, setOptOpen] = useState(() => location.pathname.startsWith('/options'));
@@ -39,19 +44,24 @@ export default function Shell() {
       <aside className="sidebar">
         <div className="brand"><img src="/logo-lds.png" alt="" /><div className="txt"><b>MS LDS<sup>®</sup></b><small>Document management</small></div></div>
         <div className="usercard">
-          <img className="avatar" src="/user.jpg" alt="" />
+          <UserAvatar id={me.data?.idAcc} />
           <div className="txt"><div className="name">{name}</div><div className="role">{role}</div></div>
         </div>
         <nav className="nav">
           <NavLink to="/" end title="Dashboard"><IconDash /><span className="txt">Dashboard</span></NavLink>
           <NavLink to="/analytics" title="Analytics"><IconChart /><span className="txt">Analytics</span></NavLink>
           <NavLink to="/documents" title="Documents"><IconDocs /><span className="txt">Documents</span></NavLink>
+          {wfCfg.data?.canUse && <NavLink to="/tasks" title="My tasks"><IconTask /><span className="txt">My tasks</span>{openTasks > 0 && <span className={`nav-badge ${wfCount.data?.overdue ? 'late' : ''}`} title={`${openTasks} open task(s)${wfCount.data?.overdue ? `, ${wfCount.data.overdue} overdue` : ''}`}>{openTasks > 99 ? '99+' : openTasks}</span>}</NavLink>}
           <button className={`nav-group ${loc.pathname.startsWith('/options') ? 'open' : ''}`} onClick={() => setOptOpen(o => !o)} title="Options" aria-expanded={optOpen}>
             <IconGear /><span className="txt">Options</span><span className="caret txt">{optOpen ? '▾' : '▸'}</span>
           </button>
           {optOpen && <NavLink className="sub" to="/options/filters" title="Filter management"><IconFilter /><span className="txt">Filter management</span></NavLink>}
           {optOpen && <NavLink className="sub" to="/options/types" title="Type management"><IconType /><span className="txt">Type management</span></NavLink>}
           {optOpen && stdOpt.data?.enabled && <NavLink className="sub" to="/options/standards" title="Standard management"><IconStd /><span className="txt">Standard management</span></NavLink>}
+          {optOpen && wfCfg.data?.canManage && <NavLink className="sub" to="/options/workflows" title="Workflow management"><IconFlow /><span className="txt">Workflow management</span></NavLink>}
+          {optOpen && catchCfg.data?.canManage && <NavLink className="sub" to="/options/catch" title="Catch management"><IconCatch /><span className="txt">Catch management</span></NavLink>}
+          {optOpen && <NavLink className="sub" to="/options/tags" title="Tags"><IconTag /><span className="txt">Tags</span></NavLink>}
+          {optOpen && me.data?.isAdmin && <NavLink className="sub" to="/options/program" title="Program options"><IconSliders /><span className="txt">Program options</span></NavLink>}
           {optOpen && <NavLink className="sub" to="/options/dependency" title="Dependency"><IconDep /><span className="txt">Dependency</span></NavLink>}
           {optOpen && <NavLink className="sub" to="/options/users" title="User management"><IconUsers /><span className="txt">User management</span></NavLink>}
           {optOpen && <NavLink className="sub" to="/options/distribution" title="E-mail distribution"><IconMail /><span className="txt">E-mail distribution</span></NavLink>}
@@ -79,13 +89,13 @@ export default function Shell() {
             <NotificationBell lang={lang} />
             <div className="profile" ref={menuRef}>
               <button className="profile-btn" onClick={() => setMenuOpen(o => !o)} aria-haspopup="menu" aria-expanded={menuOpen}>
-                <img className="avatar sm" src="/user.jpg" alt="" />
+                <UserAvatar id={me.data?.idAcc} className="avatar sm" />
                 <span className="pn"><b>{name}</b><small>{role}</small></span>
                 <span className="caret">▾</span>
               </button>
               {menuOpen && (
                 <div className="profile-menu" role="menu">
-                  <div className="pm-head"><img className="avatar" src="/user.jpg" alt="" /><div><b>{name}</b><small>{role}</small></div></div>
+                  <div className="pm-head"><UserAvatar id={me.data?.idAcc} /><div><b>{name}</b><small>{role}</small></div></div>
                   {me.data?.lastLogin && <div className="pm-meta">Last login: {new Date(me.data.lastLogin).toLocaleString('en-GB')}</div>}
                   <button role="menuitem" onClick={signOut}><IconLogout /> Sign out</button>
                 </div>

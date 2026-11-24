@@ -61,3 +61,22 @@ GRANT INSERT, UPDATE, DELETE ON dbo.Collect            TO [pl_app];   -- depende
 GRANT INSERT                 ON dbo.DocCollect         TO [pl_app];
 GRANT INSERT                 ON dbo.DocGrp             TO [pl_app];
 GO
+-- Options > Workflow management and the document workflow (Workflow / Remove from workflow, My tasks).
+-- Reading Cycles*, AccGroups, AccountAccGrp, ApplicationEmail comes from db_datareader; Documents UPDATE (IsCycle) is granted above.
+GRANT INSERT, UPDATE, DELETE ON dbo.Cycles            TO [pl_app];
+GRANT INSERT, UPDATE, DELETE ON dbo.CycleMoves        TO [pl_app];
+GRANT INSERT, DELETE         ON dbo.CycleGroup        TO [pl_app];
+GRANT INSERT, DELETE         ON dbo.CycleMoveAccGrp   TO [pl_app];
+GRANT INSERT, DELETE         ON dbo.CycleMoveDocType  TO [pl_app];
+GRANT INSERT, UPDATE, DELETE ON dbo.CycleTasks        TO [pl_app];
+GRANT INSERT                 ON dbo.CycleTasksHistory TO [pl_app];
+GO
+-- Document tabs: Catch (add words, activate / deactivate) and Options > Catch Management (edit, delete). Reading Documents, Links, Collect comes from db_datareader.
+GRANT INSERT, UPDATE, DELETE ON dbo.Catch    TO [pl_app];
+GRANT INSERT, UPDATE, DELETE ON dbo.DocCatch TO [pl_app];
+GO
+
+-- Options > Tags / Program options > Admin tab
+GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.Replacements TO [pl_app];
+GRANT SELECT, INSERT, UPDATE ON dbo.ApplicationLevelTags_History TO [pl_app];
+GRANT SELECT, DELETE ON dbo.WebLog TO [pl_app];

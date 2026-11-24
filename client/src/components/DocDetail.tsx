@@ -4,8 +4,9 @@ import { api, type DocRow } from '../api';
 import ConfirmDialog from './ConfirmDialog';
 import Toast, { type ToastMsg } from './Toast';
 import { StatusBadge, fmtDate, version } from './bits';
+import { ControlPane, CatchPane, LinkPane, DependencyPane } from './DocTabs';
 
-type Tab = 'general' | 'history' | 'assign' | 'dist';
+type Tab = 'general' | 'control' | 'catch' | 'history' | 'dep' | 'dist' | 'link' | 'assign';
 
 /** Distribution tab: e-mail distribution lists of the document (legacy addMLtoDoc / removeMLfromDoc / getEmailListByDocs). */
 function DistributionPane({ docId, lang }: { docId: number; lang: string }) {
@@ -59,9 +60,13 @@ export default function DocDetail({ doc, lang }: { doc: DocRow; lang: string }) 
     <div className="card detail">
       <div className="tabs">
         <button className={tab === 'general' ? 'on' : ''} onClick={() => setTab('general')}>General</button>
+        <button className={tab === 'control' ? 'on' : ''} onClick={() => setTab('control')}>Control</button>
+        <button className={tab === 'catch' ? 'on' : ''} onClick={() => setTab('catch')}>Catch</button>
         <button className={tab === 'history' ? 'on' : ''} onClick={() => setTab('history')}>History ({q.data?.history.length ?? 0})</button>
-        <button className={tab === 'assign' ? 'on' : ''} onClick={() => setTab('assign')}>Assignments ({q.data?.paths.length ?? 0})</button>
+        <button className={tab === 'dep' ? 'on' : ''} onClick={() => setTab('dep')}>Dependency</button>
         <button className={tab === 'dist' ? 'on' : ''} onClick={() => setTab('dist')}>Distribution ({dist.data?.lists.length ?? 0})</button>
+        <button className={tab === 'link' ? 'on' : ''} onClick={() => setTab('link')}>Linking</button>
+        <button className={tab === 'assign' ? 'on' : ''} onClick={() => setTab('assign')}>Assignments ({q.data?.paths.length ?? 0})</button>
       </div>
       <div className="detail-body">
         {q.isError && <div className="error" role="alert">Could not load document details.</div>}
@@ -92,6 +97,10 @@ export default function DocDetail({ doc, lang }: { doc: DocRow; lang: string }) 
                   <td style={{ whiteSpace: 'normal' }}>{h.modDesc}</td></tr>))}</tbody></table>
           ) : <div className="empty" style={{ height: 80 }}>No history entries.</div>
         )}
+        {tab === 'control' && <ControlPane docId={doc.idDoc} lang={lang} />}
+        {tab === 'catch' && <CatchPane docId={doc.idDoc} lang={lang} />}
+        {tab === 'dep' && <DependencyPane docId={doc.idDoc} lang={lang} />}
+        {tab === 'link' && <LinkPane docId={doc.idDoc} lang={lang} />}
         {tab === 'dist' && <DistributionPane docId={doc.idDoc} lang={lang} />}
         {tab === 'assign' && (
           q.data?.paths.length ? q.data.paths.map((p, i) => <div className="path" key={i}>📁 {p}</div>)

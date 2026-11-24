@@ -19,6 +19,7 @@ import WorkflowDialog, { type FlowKind } from './components/WorkflowDialog';
 import BulkFlowDialog, { planFor, type BulkKind } from './components/BulkFlowDialog';
 import { CopyDialog, AssignDialog, RenameDialog, DeleteDialog } from './components/DocDialogs';
 import { FreezeDialog, DefreezeDialog, ExpiryDialog, StandardLinkDialog, DependentsDialog } from './components/StatusDialogs';
+import WorkflowRunDialog, { RemoveFromWorkflowDialog } from './components/WorkflowRunDialog';
 import Toast, { type ToastMsg } from './components/Toast';
 
 // Right-click menu from the MS LDS manual (Main Window - Right Click Menu).
@@ -40,6 +41,7 @@ const MENU: { key: string; label: string; icon: string; right?: number; sepBefor
   { key: 'publish', label: 'Publish', icon: '📣', right: 19 },
   { key: 'relpub', label: 'Release / Publish', icon: '⚡', right: 19 },
   { key: 'workflow', label: 'Workflow', icon: '🔀', right: 40 },
+  { key: 'wfremove', label: 'Remove from workflow', icon: '🚫', right: 40 },
   { key: 'preview', label: 'Web preview', icon: '🌐', live: false },
   { key: 'noweb', label: "Don't view in web", icon: '🙈', right: 38 },
   { key: 'block', label: 'Block', icon: '⛔', right: 38 },
@@ -55,10 +57,12 @@ export default function Documents() {
   const nav = useNavigate();
   const [uploadOpen, setUploadOpen] = useState(false);
   const [verDoc, setVerDoc] = useState<DocRow | null>(null);
-  const [docAct, setDocAct] = useState<{ kind: 'copy' | 'assign' | 'rename' | 'delete' | 'stdlink' | 'expiry' | 'freeze' | 'defreeze'; doc: DocRow } | null>(null);
+  const [docAct, setDocAct] = useState<{ kind: 'copy' | 'assign' | 'rename' | 'delete' | 'stdlink' | 'expiry' | 'freeze' | 'defreeze' | 'workflow' | 'wfremove'; doc: DocRow } | null>(null);
   const [stdGate, setStdGate] = useState<{ doc: DocRow; then?: { kind: FlowKind; doc: DocRow } } | null>(null);   // link to mandatory standards first
   const [deps, setDeps] = useState<{ idDoc: number; docName: string } | null>(null);
   const stdOpt = useQuery({ queryKey: ['std-options'], queryFn: api.standardOptions, staleTime: 5 * 60_000 });
+  const wfAfter = useRef<DocRow | null>(null);
+  const wfCfg = useQuery({ queryKey: ['wf-config'], queryFn: api.wfConfig, staleTime: 5 * 60_000 });
   const frozenOpt = useQuery({ queryKey: ['frozen-options'], queryFn: api.frozenOptions, staleTime: 5 * 60_000 });
   const [editDoc, setEditDoc] = useState<DocRow | null>(null);
   const [flow, setFlow] = useState<{ kind: FlowKind; doc: DocRow } | null>(null);
@@ -151,6 +155,7 @@ export default function Documents() {
   const FROZEN_OFF = ['edit', 'checkout', 'checkin', 'version', 'verify', 'release', 'relpub', 'publish', 'workflow', 'block', 'rename', 'stdlink', 'expiry', 'freeze'];
   const stateOk = (key: string, d?: DocRow) => {
     if (!d) return true;
+    if (key === 'wfremove') return !!d.isCycle;
     if (d.status === 11) return key === 'defreeze' || !FROZEN_OFF.includes(key);   // Frozen: no change except Defrozen (manual p. 163)
     if (key === 'defreeze') return false;
     if (key === 'freeze') return d.status === 3 || d.status === 6 || d.status === 8;
@@ -158,7 +163,7 @@ export default function Documents() {
   };
   const stateMsg: Record<string, string> = { verify: 'Only documents in Draft or Edit status can be verified.', release: 'Only verified documents can be released. Verify the document first.',
     relpub: 'Only verified documents can be released and published. Verify the document first.', publish: 'Only released documents can be published. Release the document first.' };
-  const items: MenuItem[] = MENU.filter(m => (frozenOpt.data?.enabled !== false || (m.key !== 'freeze' && m.key !== 'defreeze')) && (stdOpt.data?.enabled || m.key !== 'stdlink')).map(m => ({ key: m.key, label: m.label, icon: m.icon, sepBefore: m.sepBefore, enabled: (m.live === true || (m.live !== false && hasRight(m.right))) && stateOk(m.key, menu?.doc) }));
+  const items: MenuItem[] = MENU.filter(m => (frozenOpt.data?.enabled !== false || (m.key !== 'freeze' && m.key !== 'defreeze')) && (stdOpt.data?.enabled || m.key !== 'stdlink') && (wfCfg.data?.enabled !== false || (m.key !== 'workflow' && m.key !== 'wfremove'))).map(m => ({ key: m.key, label: m.label, icon: m.icon, sepBefore: m.sepBefore, enabled: (m.live === true || (m.live !== false && hasRight(m.right))) && stateOk(m.key, menu?.doc) }));
 
   // ---- bulk selection ----
   const toggleOne = (d: DocRow) => setChecked(c => { const n = new Map(c); if (n.has(d.idDoc)) n.delete(d.idDoc); else n.set(d.idDoc, d); return n; });
@@ -252,7 +257,7 @@ export default function Documents() {
       const link = `${location.origin}/documents?doc=${doc.idDoc}`;
       navigator.clipboard?.writeText(link).then(() => flash('Weblink copied'), () => flash(link));
     } else if (key === 'print') { setCurrent(doc); setTimeout(() => window.print(), 300); }
-    else if (key === 'copy' || key === 'assign' || key === 'rename' || key === 'delete' || key === 'stdlink' || key === 'expiry' || key === 'freeze' || key === 'defreeze') setDocAct({ kind: key, doc });
+    else if (key === 'copy' || key === 'assign' || key === 'rename' || key === 'delete' || key === 'stdlink' || key === 'expiry' || key === 'freeze' || key === 'defreeze' || key === 'workflow' || key === 'wfremove') setDocAct({ kind: key, doc });
     else flash('This action is not available.');
   }
   const head = (label: string, key: string) => (
@@ -365,12 +370,15 @@ export default function Documents() {
           setChecked(new Map()); setCurrent(null);
         }} />}
       {uploadOpen && (
-        <UploadDialog groups={tree.data?.groups ?? []} defaultGroup={typeof sel === 'number' ? sel : null} lang={lang} languages={languages}
+        <UploadDialog groups={tree.data?.groups ?? []} defaultGroup={typeof sel === 'number' ? sel : null} lang={lang} languages={languages} canWorkflow={!!wfCfg.data?.canUse}
           onClose={() => setUploadOpen(false)}
-          onDone={rs => {
+          onDone={(rs, chooseWf) => {
             setUploadOpen(false);
             const r = rs[0]; if (!r) return;
-            api.docStandards(r.idDoc, r.lang).then(x => { if (x.items.length > 0) setStdGate({ doc: { idDoc: r.idDoc, docName: r.name, lang: r.lang } as DocRow }); }, () => undefined);   // manual p. 65: assign to the mandatory standards on creation
+            const newDoc = { idDoc: r.idDoc, docName: r.name, lang: r.lang } as DocRow;
+            if (chooseWf) wfAfter.current = newDoc;
+            const openWf = () => { const w = wfAfter.current; wfAfter.current = null; if (w) setDocAct({ kind: 'workflow', doc: w }); };   // manual p. 117: choose the workflow when a document is created
+            api.docStandards(r.idDoc, r.lang).then(x => { if (x.items.length > 0) setStdGate({ doc: newDoc }); else openWf(); }, openWf);   // manual p. 65: assign to the mandatory standards on creation
             setMsg({ ok: true, t: rs.length === 1 ? `Document ${r.idDoc} uploaded (${r.languages.join(', ')}).` : `${rs.length} documents were uploaded (IDs ${rs.map(x => x.idDoc).join(', ')}).` });
             if (r.lang !== lang) setLang(r.lang);          // show the new document in the language it was created for
             nav(`/documents?doc=${r.idDoc}`);                // jump to its folder and highlight it
@@ -384,8 +392,10 @@ export default function Documents() {
       {docAct?.kind === 'expiry' && <ExpiryDialog doc={docAct.doc} lang={lang} onClose={() => setDocAct(null)} onDone={m => { setDocAct(null); flash(m); }} />}
       {docAct?.kind === 'freeze' && <FreezeDialog doc={docAct.doc} lang={lang} onClose={() => setDocAct(null)} onDone={m => { setDocAct(null); setMsg({ ok: true, t: m }); }} />}
       {docAct?.kind === 'defreeze' && <DefreezeDialog doc={docAct.doc} lang={lang} onClose={() => setDocAct(null)} onDone={m => { setDocAct(null); setMsg({ ok: true, t: m }); }} />}
+      {docAct?.kind === 'workflow' && <WorkflowRunDialog doc={docAct.doc} lang={lang} onClose={() => setDocAct(null)} onDone={m => { setDocAct(null); setMsg({ ok: !/no mail was sent|could not be sent/i.test(m), t: m }); }} />}
+      {docAct?.kind === 'wfremove' && <RemoveFromWorkflowDialog doc={docAct.doc} lang={lang} onClose={() => setDocAct(null)} onDone={(m, ok) => { setDocAct(null); setMsg({ ok, t: m }); }} />}
       {stdGate && <StandardLinkDialog doc={stdGate.doc} lang={lang} intro="This document is not yet linked to all mandatory standards. Link it before it is released."
-        onClose={() => setStdGate(null)} onDone={m => { const t = stdGate.then; setStdGate(null); flash(m); if (t) setFlow(t); }} />}
+        onClose={() => { setStdGate(null); const w = wfAfter.current; wfAfter.current = null; if (w) setDocAct({ kind: 'workflow', doc: w }); }} onDone={m => { const t = stdGate.then; setStdGate(null); flash(m); if (t) setFlow(t); else { const w = wfAfter.current; wfAfter.current = null; if (w) setDocAct({ kind: 'workflow', doc: w }); } }} />}
       {deps && <DependentsDialog doc={deps} lang={lang} onClose={() => setDeps(null)} onDone={m => { setDeps(null); flash(m); }} />}
       {docAct?.kind === 'assign' && (
         <AssignDialog doc={docAct.doc} lang={lang} groups={tree.data?.groups ?? []} onClose={() => setDocAct(null)} onChanged={flash} />
@@ -411,6 +421,8 @@ export default function Documents() {
               if (dp.choose) setDeps({ idDoc: r.idDoc, docName: d.docName });
               else { const x = await api.editDependents(r.idDoc, lang, movable.map(i => i.idDoc)); flash(`${x.moved} dependent document(s) put in Edit mode.`); await qc.invalidateQueries({ queryKey: ['docs'] }); }
             }, () => undefined);
+            // the user has an open Edit task for this document: offer the workflow hand-over right away
+            if (wfCfg.data?.canUse) api.wfTasks(lang, 1).then(t => { if (t.items.some(i => i.idDoc === r.idDoc)) setDocAct({ kind: 'workflow', doc: d }); }, () => undefined);
           }} />
       )}
       {toast && <div className="toast" role="status">{toast}</div>}

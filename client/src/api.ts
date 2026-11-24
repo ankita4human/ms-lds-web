@@ -2,8 +2,8 @@ const BASE = (import.meta.env.VITE_API_URL as string | undefined) ?? '';
 const KEY = 'pl_token';
 export const auth = {
   get: () => sessionStorage.getItem(KEY),
-  set: (t: string) => sessionStorage.setItem(KEY, t),
-  clear: () => sessionStorage.removeItem(KEY),
+  set: (t: string) => { sessionStorage.setItem(KEY, t); window.dispatchEvent(new Event('pl-auth')); },
+  clear: () => { sessionStorage.removeItem(KEY); window.dispatchEvent(new Event('pl-auth')); },
 };
 async function req<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
@@ -24,7 +24,7 @@ export type DocRow = {
   idDoc: number; docName: string; lang: string; langStandard?: string;
   status: number; statusName: string; type: number; typeName: string;
   v1: number; v2: number; v3: number; extension?: string;
-  dateCre?: string; dateMod?: string; dateExp?: string; datePub?: string; dateRel?: string; doNotExpire?: boolean;
+  dateCre?: string; dateMod?: string; dateExp?: string; datePub?: string; dateRel?: string; doNotExpire?: boolean; isCycle?: boolean;
   creator?: string; publisher?: string; releaser?: string; paths?: string[];
 };
 export type DocPage = { total: number; page: number; pageSize: number; items: DocRow[] };
@@ -137,7 +137,79 @@ export type DepItem = { id: number; name: string; documents: number };
 export type DepDocItem = { idDoc: number; name: string; status: number; statusName: string; version: string };
 export type DependentItem = DepDocItem & { lang: string; dependency: string; movable: boolean };
 
+// ---- Workflow (Options > Workflow management, document workflow, My tasks) ----
+export type WfConfig = { enabled: boolean; canManage: boolean; canUse: boolean };
+export type WfHead = { id: number; name: string; active: boolean; steps: number; documents: number };
+export type WfName = { id: number; name: string };
+export type WfOptions = { docTypes: WfName[]; userGroups: WfName[]; users: WfName[]; groups: WfName[]; layers: WfName[] };
+export type WfStepBody = { id: number; name: string; layer: number; editor: number; userGroup: number; days: number; description: string; inUse?: boolean };
+export type WfDetail = { id: number; name: string; active: boolean; description: string; docTypes: number[]; userGroups: number[]; groups: number[]; steps: WfStepBody[] };
+export type WfSaveBody = { name: string; active: boolean; description: string; docTypes: number[]; userGroups: number[]; groups: number[]; steps: WfStepBody[] };
+export type WfStep = { id: number; name: string; layer: number; layerName: string; days: number; description: string; editor: number; candidates: WfName[] };
+export type WfDocInfo = { id: number; name: string; status: number; version: string; type?: number };
+export type WfCycle = { id: number; name: string; description: string; startStep: number; nextDefault: number; steps: WfStep[]; docTypes: number[]; userGroups: number[]; groups: number[] };
+export type WfFilters = { docTypes: WfName[]; userGroups: WfName[]; groups: WfName[] };
+export type WfCurrent = {
+  taskId: number; moveId: number; step: string; layer: number; layerName: string; stepDescription: string; assigneeId: number; assignee: string;
+  startedById: number; startedBy: string; dateStart?: string; due?: string; remark: string; overdue: boolean; expectedStatus: number; isLast: boolean;
+};
+export type WfHistoryItem = { taskId: number; step: string; layerName: string; assignee: string; assignedBy: string; assigned?: string; due?: string; finished?: string; outcome: 'open' | 'done' | 'returned'; remark: string };
+export type WfState =
+  | { inWorkflow: false; doc: WfDocInfo; canStart: boolean; filters: WfFilters; cycles: WfCycle[] }
+  | { inWorkflow: true; doc: WfDocInfo; cycle: { id: number; name: string; description: string }; current: WfCurrent | null; canAct: boolean; canRemove: boolean;
+      next: { nextDefault: number; finish: boolean }; previous: { moveId: number; editorId: number; editor: string; step: string } | null; steps: WfStep[];
+      history: { run: number; items: WfHistoryItem[] } };
+export type WfRun = { run: number; current: boolean; workflow: string; data: { run: number; items: WfHistoryItem[] } };
+export type WfTaskItem = { taskId: number; idDoc: number; lang: string; docName: string; ext?: string; status: number; statusName: string; version: string; workflow: string; step: string;
+  layer: number; layerName: string; startedBy: string; assigned?: string; due?: string; overdue: boolean; remark: string };
+export type WfTaskNote = { taskId: number; idDoc: number; lang: string; docName: string; workflow: string; step: string; layer: number; layerName: string; startedBy: string; assigned?: string; due?: string; overdue: boolean };
+export type WfSummary = { enabled: boolean; total: number; overdue: number; counts: number[]; items: WfTaskNote[] };
+export type WfTasks = { enabled: boolean; counts: number[]; layerNames?: string[]; items: WfTaskItem[] };
+export type WfHandOver = { lang: string; nextMoveId: number; editorId: number; due?: string | null; remark?: string };
+
+// ---- Document tabs (Control, Catch, Linking, Dependency) and Catch Management ----
+export type CtlEntry = { on?: string; by: string };
+export type DocControl = { created: CtlEntry; released: CtlEntry; edited: CtlEntry; verified: CtlEntry; published: CtlEntry };
+export type DocCatchItem = { idCatch: number; word: string; active: boolean; manual: boolean };
+export type DocCatchData = { enabled: boolean; canManage: boolean; docLevel: boolean; minLen: number; items: DocCatchItem[] };
+export type DocLinks = {
+  outgoing: { link: string; targetId: number; name: string; accessible: boolean; kind: 'document' | 'external' | 'mail' }[];
+  incoming: { sourceId: number; name: string; accessible: boolean }[];
+};
+export type DocDeps = { canManage: boolean; items: { id: number; name: string; documents: { idDoc: number; name: string; status: number; self: boolean }[] }[]; available: { id: number; name: string }[] };
+export type CatchConfig = { enabled: boolean; canManage: boolean; docLevel: boolean; minLen: number };
+export type CatchWord = { id: number; word: string; active: boolean; documents: number };
+export type CatchPage = { total: number; page: number; pageSize: number; all: number; active: number; items: CatchWord[] };
+export type CatchDoc = { idDoc: number; name: string; status: number; manual: boolean; active: boolean };
+
+export type TagItem = { id: number; name: string; description?: string; value?: string | null; app: number };
+export type TagList = { kind: string; lang: string; otherEnabled: boolean; products: { id: number; name: string }[]; items: TagItem[] };
+export type AppTag = { id: number; tag: string; description: string; replacement: string };
+export type AppTagList = { lang: string; maxDescription: number; maxReplacement: number; items: AppTag[] };
+export type AppTagHist = { sNo: number; tag: number; name: string; replacement: string; created?: string; createdBy?: string; modified?: string; modifiedBy?: string; current: boolean };
+export type DeletedDoc = { id: number; name: string; version: string; status: number; type: string; deleted?: string; deletedBy?: string };
+export type DeletedPage = { lang: string; page: number; pageSize: number; total: number; items: DeletedDoc[] };
+export type BrokenLink = { id: number; name: string; targetId: number; target: string; error: string };
+export type WebHit = { id: number; name: string; hits: number; last?: string };
+export type WebHistory = { lang: string; from: string; to: string; page: number; pageSize: number; total: number; hits: number; items: WebHit[] };
+export type AppCatchWord = { id: number; word: string; active: boolean };
+
 export const api = {
+  // ---- Options > Tags and Program options > Admin ----
+  tags: (lang: string, kind: string, app = 0) => req<TagList>(`/api/lds/tags?lang=${encodeURIComponent(lang)}&kind=${kind}&app=${app}`),
+  appTags: (lang: string) => req<AppTagList>(`/api/lds/admin/app-tags?lang=${encodeURIComponent(lang)}`),
+  addAppTag: (lang: string, description: string, replacement: string) => req<{ id: number }>('/api/lds/admin/app-tags', { method: 'POST', body: JSON.stringify({ lang, description, replacement }) }),
+  editAppTag: (id: number, lang: string, description: string, replacement: string) => req<{ changed: boolean }>(`/api/lds/admin/app-tags/${id}`, { method: 'PUT', body: JSON.stringify({ lang, description, replacement }) }),
+  deleteAppTag: (id: number, lang: string) => req<{ removed: number }>(`/api/lds/admin/app-tags/${id}?lang=${encodeURIComponent(lang)}`, { method: 'DELETE' }),
+  appTagHistory: (lang: string) => req<AppTagHist[]>(`/api/lds/admin/app-tags/history?lang=${encodeURIComponent(lang)}`),
+  deletedDocs: (lang: string, q: string, page: number) => req<DeletedPage>(`/api/lds/admin/deleted-docs?lang=${encodeURIComponent(lang)}&q=${encodeURIComponent(q)}&page=${page}`),
+  brokenLinks: (lang: string, type: string) => req<{ items: BrokenLink[] }>(`/api/lds/admin/broken-links?lang=${encodeURIComponent(lang)}&type=${type}`),
+  webHistory: (lang: string, from: string, to: string, page: number) => req<WebHistory>(`/api/lds/admin/web-history?lang=${encodeURIComponent(lang)}&from=${from}&to=${to}&page=${page}`),
+  deleteWebHistory: (from: string, to: string) => req<{ removed: number }>('/api/lds/admin/web-history/delete', { method: 'POST', body: JSON.stringify({ from, to }) }),
+  appCatch: (lang: string) => req<{ items: AppCatchWord[] }>(`/api/lds/admin/app-catch?lang=${encodeURIComponent(lang)}`),
+  addAppCatch: (lang: string, words: string[]) => req<{ added: number; existing: number }>('/api/lds/admin/app-catch', { method: 'POST', body: JSON.stringify({ lang, words }) }),
+  setAppCatchState: (lang: string, ids: number[], active: boolean) => req<{ changed: number }>('/api/lds/admin/app-catch/state', { method: 'PUT', body: JSON.stringify({ lang, ids, active }) }),
+  deleteAppCatch: (ids: number[]) => req<{ removed: number }>('/api/lds/admin/app-catch/delete', { method: 'POST', body: JSON.stringify({ ids }) }),
   // ---- Options > Standard management ----
   standards: (lang: string) => req<StdTree>(`/api/lds/standards?lang=${encodeURIComponent(lang)}`),
   standard: (id: number, lang: string) => req<StdDetail>(`/api/lds/standards/${id}?lang=${encodeURIComponent(lang)}`),
@@ -174,6 +246,36 @@ export const api = {
   freezeDoc: (id: number, lang: string, expires?: string | null, mail?: MailPayload) => req<FlowResult & { mailSent?: boolean; mailError?: string | null }>(`/api/lds/documents/${id}/freeze`, { method: 'POST', body: JSON.stringify({ lang, expires, mail }) }),
   defreezeDoc: (id: number, lang: string, expires?: string | null) => req<FlowResult>(`/api/lds/documents/${id}/defreeze`, { method: 'POST', body: JSON.stringify({ lang, expires }) }),
   setExpiry: (id: number, lang: string, dateExp?: string | null, doNotExpire?: boolean) => req<{ dateExp: string | null; doNotExpire: boolean; languages: string }>(`/api/lds/documents/${id}/expiry`, { method: 'PUT', body: JSON.stringify({ lang, dateExp, doNotExpire }) }),
+  // ---- Document tabs, Catch Management ----
+  docControl: (id: number, lang: string) => req<DocControl>(`/api/lds/documents/${id}/control?lang=${encodeURIComponent(lang)}`),
+  docCatch: (id: number, lang: string) => req<DocCatchData>(`/api/lds/documents/${id}/catch?lang=${encodeURIComponent(lang)}`),
+  addDocCatch: (id: number, lang: string, words: string[]) => req<{ created: number; linked: number; message: string }>(`/api/lds/documents/${id}/catch`, { method: 'POST', body: JSON.stringify({ lang, words }) }),
+  setDocCatchState: (id: number, lang: string, ids: number[], active: boolean) => req<{ changed: number }>(`/api/lds/documents/${id}/catch/state`, { method: 'PUT', body: JSON.stringify({ lang, ids, active }) }),
+  docLinks: (id: number, lang: string) => req<DocLinks>(`/api/lds/documents/${id}/links?lang=${encodeURIComponent(lang)}`),
+  docDependencies: (id: number, lang: string) => req<DocDeps>(`/api/lds/documents/${id}/dependencies?lang=${encodeURIComponent(lang)}`),
+  catchConfig: () => req<CatchConfig>('/api/lds/catch/config'),
+  catchWords: (lang: string, q: string, state: string, page: number) => req<CatchPage>(`/api/lds/catch?lang=${encodeURIComponent(lang)}&q=${encodeURIComponent(q)}&state=${state}&page=${page}&pageSize=100`),
+  catchDocs: (id: number) => req<{ items: CatchDoc[] }>(`/api/lds/catch/${id}/documents`),
+  setCatchState: (ids: number[], active: boolean) => req<{ changed: number }>('/api/lds/catch/state', { method: 'PUT', body: JSON.stringify({ ids, active }) }),
+  setCatchDocState: (items: { idDoc: number; idCatch: number; active: boolean }[]) => req<{ changed: number }>('/api/lds/catch/documents/state', { method: 'PUT', body: JSON.stringify({ items }) }),
+  editCatch: (id: number, word: string) => req<{ id: number }>(`/api/lds/catch/${id}`, { method: 'PUT', body: JSON.stringify({ word }) }),
+  deleteCatch: (ids: number[]) => req<{ removed: number }>('/api/lds/catch/delete', { method: 'POST', body: JSON.stringify({ ids }) }),
+  // ---- Workflow ----
+  wfConfig: () => req<WfConfig>('/api/lds/workflow/config'),
+  workflows: () => req<{ items: WfHead[] }>('/api/lds/workflows'),
+  wfOptions: (lang: string) => req<WfOptions>(`/api/lds/workflows/options?lang=${encodeURIComponent(lang)}`),
+  wf: (id: number) => req<WfDetail>(`/api/lds/workflows/${id}`),
+  wfCreate: (b: WfSaveBody) => req<{ id: number }>('/api/lds/workflows', { method: 'POST', body: JSON.stringify(b) }),
+  wfUpdate: (id: number, b: WfSaveBody) => req<{ id: number }>(`/api/lds/workflows/${id}`, { method: 'PUT', body: JSON.stringify(b) }),
+  wfDelete: (id: number) => req<{ removed: number }>(`/api/lds/workflows/${id}`, { method: 'DELETE' }),
+  wfState: (docId: number, lang: string) => req<WfState>(`/api/lds/documents/${docId}/workflow?lang=${encodeURIComponent(lang)}`),
+  wfStart: (docId: number, b: WfHandOver & { cycleId: number }) => req<{ started: boolean; mail: string }>(`/api/lds/documents/${docId}/workflow/start`, { method: 'POST', body: JSON.stringify(b) }),
+  wfAdvance: (docId: number, b: WfHandOver & { taskId: number; action: 'accept' | 'reject' }) => req<{ finished: boolean; rejected: boolean; mail: string }>(`/api/lds/documents/${docId}/workflow/advance`, { method: 'POST', body: JSON.stringify(b) }),
+  wfRemove: (docId: number, lang: string, reason: string) => req<{ removed: boolean }>(`/api/lds/documents/${docId}/workflow/remove`, { method: 'POST', body: JSON.stringify({ lang, reason }) }),
+  wfHistory: (docId: number, lang: string) => req<{ runs: WfRun[] }>(`/api/lds/documents/${docId}/workflow/history?lang=${encodeURIComponent(lang)}`),
+  wfMailTest: (lang: string) => req<{ ok: boolean; message: string }>('/api/lds/workflow/mail-test', { method: 'POST', body: JSON.stringify({ lang }) }),
+  wfSummary: () => req<WfSummary>('/api/lds/workflow/tasks/summary'),
+  wfTasks: (lang: string, layer = 0) => req<WfTasks>(`/api/lds/workflow/tasks?lang=${encodeURIComponent(lang)}&layer=${layer}`),
   workflowOptions: () => req<{ validateOnRelease: boolean }>('/api/lds/workflow/options'),
   verifyDoc: (id: number, lang: string) => req<FlowResult>(`/api/lds/documents/${id}/verify?lang=${encodeURIComponent(lang)}`, { method: 'POST' }),
   notifications: (lang: string) => req<Notifications>(`/api/lds/notifications?lang=${encodeURIComponent(lang)}`),

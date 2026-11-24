@@ -13,9 +13,9 @@ let seq = 0;
 const baseName = (n: string) => n.replace(/\.[^.]+$/, '').slice(0, 80);
 
 /** "New document": choose one or many files, language (one or all), type, folder and version, then upload them one after the other. */
-export default function UploadDialog({ groups, defaultGroup, lang, languages, onClose, onDone }: {
+export default function UploadDialog({ groups, defaultGroup, lang, languages, onClose, onDone, canWorkflow }: {
   groups: GroupNode[]; defaultGroup: number | null; lang: string; languages: Lang[];
-  onClose: () => void; onDone: (r: UploadResult[]) => void;
+  onClose: () => void; onDone: (r: UploadResult[], chooseWorkflow?: boolean) => void; canWorkflow?: boolean;
 }) {
   const qc = useQueryClient();
   const input = useRef<HTMLInputElement>(null);
@@ -24,6 +24,7 @@ export default function UploadDialog({ groups, defaultGroup, lang, languages, on
   const [type, setType] = useState<number | ''>('');
   const [group, setGroup] = useState<number | ''>(defaultGroup ?? '');
   const [ver, setVer] = useState<Ver>({ v1: 0, v2: 0, v3: 1 });   // manual: default 0.0.1
+  const [wf, setWf] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [drag, setDrag] = useState(false);
@@ -85,7 +86,7 @@ export default function UploadDialog({ groups, defaultGroup, lang, languages, on
     }
     await Promise.all(['docs', 'groups', 'stats', 'doc-deep'].map(k => qc.invalidateQueries({ queryKey: [k] })));
     setBusy(false);
-    if (failed === 0) onDone(results);
+    if (failed === 0) onDone(results, wf && results.length === 1);
     else setErr(`${failed} document${failed === 1 ? '' : 's'} could not be uploaded. The others were created. Fix the problem and press Upload again to retry the failed ones.`);
   }
 
@@ -154,6 +155,8 @@ export default function UploadDialog({ groups, defaultGroup, lang, languages, on
           <VersionPicker value={ver} onChange={setVer} />
           <small className="mh">Every document is created in every language with this version, in Draft status.</small>
         </div>
+
+        {canWorkflow && <label className="up-wf"><input type="checkbox" checked={wf} disabled={items.length > 1} onChange={e => setWf(e.target.checked)} />Choose a workflow for the new document after the upload{items.length > 1 ? ' (one document at a time)' : ''}</label>}
 
         {busy && <div className="up-progress"><span style={{ width: `${Math.round((doneCount / Math.max(1, items.length)) * 100)}%` }} /><em>Uploading {doneCount + 1} of {items.length}...</em></div>}
         {err && <div className="alert" role="alert">{err}</div>}

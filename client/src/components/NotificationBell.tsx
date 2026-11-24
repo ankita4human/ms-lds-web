@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { api, type PubFeedItem, type PubJob } from '../api';
+import UserAvatar from './UserAvatar';
+import { api, type PubFeedItem, type PubJob, type WfTaskNote } from '../api';
 
 /** Bell in the top bar: publishing queue (live) + a "who published what" timeline, Facebook style (manual p. 109 Publish). */
 
@@ -40,6 +41,13 @@ function dayLabel(iso: string) {
 }
 const key = (i: PubFeedItem) => `${i.idDoc}-${i.lang}-${i.publishedOn}`;
 
+const TASK_SEEN = 'pl_task_seen';
+const readTaskSeen = (me: number): Set<number> | null => { try { const v = localStorage.getItem(`${TASK_SEEN}_${me}`); return v ? new Set(JSON.parse(v) as number[]) : null; } catch { return null; } };
+const writeTaskSeen = (me: number, ids: number[]) => { try { localStorage.setItem(`${TASK_SEEN}_${me}`, JSON.stringify(ids)); } catch { /* private mode */ } };
+const TASK_ICO: Record<number, string> = { 1: '✏️', 2: '🔍', 3: '✅', 4: '🌐' };
+const TASK_TXT: Record<number, string> = { 1: 'to edit', 2: 'to verify', 3: 'to release', 4: 'to publish' };
+const dueTxt = (t: WfTaskNote) => t.due ? `${t.overdue ? 'overdue since' : 'due'} ${new Date(t.due).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}` : '';
+
 type Snack = { id: number; ok: boolean; title: string; text: string };
 
 export default function NotificationBell({ lang }: { lang: string }) {
@@ -60,6 +68,9 @@ export default function NotificationBell({ lang }: { lang: string }) {
     refetchInterval: d => (d.state.data?.jobs.some(j => j.status === 'queued' || j.status === 'running') ? 2500 : 15000),
     refetchOnWindowFocus: true,
   });
+  const sum = useQuery({ queryKey: ['wf-summary'], queryFn: api.wfSummary, refetchInterval: 30_000, refetchOnWindowFocus: true, staleTime: 10_000 });
+  const tasks = sum.data?.enabled ? sum.data.items : [];
+  const taskTotal = sum.data?.enabled ? sum.data.total : 0;
   const data = q.data;
   const me = data?.me;
   const jobs = data?.jobs ?? [];
@@ -67,7 +78,7 @@ export default function NotificationBell({ lang }: { lang: string }) {
   const active = jobs.filter(j => j.status === 'queued' || j.status === 'running');
   const failed = jobs.filter(j => j.status === 'failed');
   const unreadItems = useMemo(() => items.filter(i => i.publishedById !== me && when(i.publishedOn) > new Date(seen)), [items, me, seen]);
-  const badge = unreadItems.length + failed.length;
+  const badge = unreadItems.length + failed.length + taskTotal;
 
   useEffect(() => { if (readSeen() === null) writeSeen(seen); }, [seen]);
   useEffect(() => { const h = () => qc.invalidateQueries({ queryKey: ['notifications'] }); window.addEventListener('pl-publish-queued', h); return () => window.removeEventListener('pl-publish-queued', h); }, [qc]);
@@ -103,6 +114,26 @@ export default function NotificationBell({ lang }: { lang: string }) {
     p.clear(); data.jobs.forEach(j => p.set(j.id, j.status)); ready.current = true;
   }, [data, pushSnack, qc]);
 
+  // New tasks assigned to me (document to edit / verify / release / publish): snackbar + browser notification, once per task.
+  useEffect(() => {
+    if (!sum.data?.enabled || me === undefined) return;
+    const ids = sum.data.items.map(t => t.taskId);
+    const known = readTaskSeen(me);
+    const fresh = known === null ? sum.data.items : sum.data.items.filter(t => !known.has(t.taskId));
+    writeTaskSeen(me, ids);
+    if (fresh.length === 0) return;
+    const one = fresh.length === 1 ? fresh[0]! : null;
+    const title = one ? `A document is waiting ${TASK_TXT[one.layer] ?? ''}` : `${fresh.length} documents are waiting for you`;
+    const text = one ? `“${one.docName}”${one.workflow ? ` · ${one.workflow}` : ''}${one.startedBy ? ` · from ${one.startedBy}` : ''}` : fresh.slice(0, 3).map(t => `“${t.docName}” ${TASK_TXT[t.layer] ?? ''}`).join('; ') + (fresh.length > 3 ? ' …' : '');
+    pushSnack({ ok: true, title, text });
+    try {
+      if ('Notification' in window && Notification.permission === 'granted') {
+        const n = new Notification(title, { body: text, tag: 'pl-tasks', icon: '/logo-qf.png' });
+        n.onclick = () => { window.focus(); nav('/tasks'); n.close(); };
+      }
+    } catch { /* notifications not available */ }
+  }, [sum.data, me, pushSnack, nav]);
+
   // close on outside click / Escape
   useEffect(() => {
     if (!open) return;
@@ -114,6 +145,7 @@ export default function NotificationBell({ lang }: { lang: string }) {
 
   function toggle() {
     if (!open) {
+      try { if ('Notification' in window && Notification.permission === 'default') void Notification.requestPermission(); } catch { /* ignore */ }
       setFresh(new Set(unreadItems.map(key)));        // keep them highlighted while the window is open
       const now = new Date().toISOString(); setSeen(now); writeSeen(now);
       q.refetch();
@@ -144,11 +176,27 @@ export default function NotificationBell({ lang }: { lang: string }) {
         <div className="nb-panel" role="dialog" aria-label="Notifications">
           <div className="nb-head">
             <div><h3>Notifications</h3>
-              <small>{data ? `${data.total} document${data.total === 1 ? '' : 's'} published in the last ${data.days} days` : 'Loading...'}</small></div>
+              <small>{taskTotal > 0 ? `${taskTotal} task${taskTotal === 1 ? '' : 's'} waiting for you · ` : ''}{data ? `${data.total} document${data.total === 1 ? '' : 's'} published in the last ${data.days} days` : 'Loading...'}</small></div>
             <span className="nb-ico" aria-hidden="true">📣</span>
           </div>
 
           <div className="nb-body">
+            {tasks.length > 0 && (
+              <div className="nb-sec">
+                <div className="nb-sec-h"><span>Waiting for you ({taskTotal})</span><button onClick={() => { setOpen(false); nav('/tasks'); }}>Open My tasks</button></div>
+                {tasks.slice(0, 8).map(t => (
+                  <button key={t.taskId} className={`nb-item nb-task ${t.overdue ? 'late' : ''}`} onClick={() => { setOpen(false); nav('/tasks'); }}>
+                    <span className="nb-av"><span className="nb-av-i" style={{ background: t.overdue ? '#d92d20' : '#4f46e5' }}>{TASK_ICO[t.layer] ?? '•'}</span></span>
+                    <span className="nb-tx">
+                      <span className="nb-line"><b>{t.docName}</b> {TASK_TXT[t.layer] ?? ''}</span>
+                      <span className="nb-chips">{t.workflow && <em>{t.workflow}</em>}<em>{t.step || t.layerName}</em><em>{t.lang}</em>{t.due && <em className={t.overdue ? 'late' : ''}>{dueTxt(t)}</em>}</span>
+                      {t.startedBy && <span className="nb-time">from {t.startedBy}{t.assigned ? ` · ${ago(t.assigned)}` : ''}</span>}
+                    </span>
+                  </button>))}
+                {tasks.length > 8 && <div className="nb-foot" style={{ padding: '4px 10px' }}>+ {tasks.length - 8} more in My tasks</div>}
+              </div>
+            )}
+
             {(active.length > 0 || finished.length > 0) && (
               <div className="nb-sec">
                 <div className="nb-sec-h"><span>Your publishing</span>{finished.length > 0 && <button onClick={clearDone}>Clear finished</button>}</div>
@@ -181,7 +229,7 @@ export default function NotificationBell({ lang }: { lang: string }) {
                   return (
                     <button key={key(i)} className={`nb-item ${fresh.has(key(i)) ? 'new' : ''}`} onClick={() => { setOpen(false); nav(`/documents?doc=${i.idDoc}`); }}>
                       <span className="nb-av">
-                        {mine ? <img src="/user.jpg" alt="" /> : <span className="nb-av-i" style={{ background: colorOf(i.publishedBy) }}>{initials(i.publishedBy)}</span>}
+                        {mine ? <UserAvatar id={me} className="nb-me" /> : <span className="nb-av-i" style={{ background: colorOf(i.publishedBy) }}>{initials(i.publishedBy)}</span>}
                         <span className="nb-ft" style={{ background: f.c }} title={i.ext ? `.${i.ext}` : 'file'}>{f.t}</span>
                       </span>
                       <span className="nb-tx">
