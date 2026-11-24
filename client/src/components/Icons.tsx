@@ -32,3 +32,5 @@ export const IconTask = () => <P><rect x="4" y="4" width="16" height="16" rx="3"
 export const IconCatch = () => <P><path d="M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z" /><circle cx="7.5" cy="7.5" r="1.3" /></P>;
 export const IconTag = () => <P><path d="M4 4h7l9 9-7 7-9-9z" /><path d="M8 8h.01" /></P>;
 export const IconSliders = () => <P><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0" /><circle cx="16" cy="6" r="2" /><circle cx="10" cy="12" r="2" /><circle cx="18" cy="18" r="2" /></P>;
+
+export const IconSpark = () => <P><path d="M12 3l1.8 4.6L18.5 9l-4.7 1.4L12 15l-1.8-4.6L5.5 9l4.7-1.4z" /><path d="M19 15l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z" /></P>;

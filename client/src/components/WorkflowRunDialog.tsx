@@ -71,6 +71,8 @@ export default function WorkflowRunDialog({ doc, lang, onClose, onDone }: {
   const [hand, setHand] = useState<Hand>({ moveId: 0, editorId: 0, due: addDays(0), remark: '' });
   const [mode, setMode] = useState<'accept' | 'reject'>('accept');
   const [reason, setReason] = useState('');
+  const [pwd, setPwd] = useState('');
+  const wfo = useQuery({ queryKey: ['wf-options-rel'], queryFn: () => api.workflowOptions(), staleTime: 60000 });
   const [askRemove, setAskRemove] = useState(false);
   const [removeReason, setRemoveReason] = useState('');
   const [busy, setBusy] = useState(false);
@@ -116,8 +118,20 @@ export default function WorkflowRunDialog({ doc, lang, onClose, onDone }: {
   const advance = () => run(async () => {
     if (!s || !s.inWorkflow || !s.current) return '';
     if (mode === 'accept') {
+      // Release / Publish steps do the real action first (the same code as the Document menu), then the workflow moves on.
+      const layer = s.current.layer, st = s.doc.status;
+      let extra = '';
+      if (layer === 3 || layer === 4) {
+        if (st === 1 || st === 2) await api.verifyDoc(doc.idDoc, lang);
+        const needPwd = !!wfo.data?.validateOnRelease;
+        if (layer === 3 && st !== 8 && st !== 3) { if (needPwd && !pwd) throw new Error('Please enter your password to release the document.'); await api.releaseDoc(doc.idDoc, lang, needPwd ? pwd : undefined, undefined, true); extra = ' The document was released.'; }
+        if (layer === 4) {
+          if (st === 1 || st === 2 || st === 7) { if (needPwd && !pwd) throw new Error('Please enter your password to release the document.'); await api.releasePublishDoc(doc.idDoc, lang, needPwd ? pwd : undefined, undefined, undefined, true); extra = ' The document was released and queued for publishing.'; }
+          else if (st === 8) { await api.publishDoc(doc.idDoc, lang, undefined, true); extra = ' The document was queued for publishing.'; }
+        }
+      }
       const r = await api.wfAdvance(doc.idDoc, { lang, taskId: s.current.taskId, action: 'accept', nextMoveId: s.current.isLast ? 0 : hand.moveId, editorId: s.current.isLast ? 0 : hand.editorId, due: s.current.isLast ? null : hand.due, remark: hand.remark.trim() });
-      return r.finished ? 'The workflow is completed.' : `The document was handed over. ${r.mail}`.trim();
+      return (r.finished ? 'The workflow is completed.' : `The document was handed over. ${r.mail}`.trim()) + extra;
     }
     if (!reason.trim()) throw new Error('Please give a reason: the previous user sees it as the remark.');
     const p = s.previous;
@@ -134,7 +148,7 @@ export default function WorkflowRunDialog({ doc, lang, onClose, onDone }: {
   }, [s, cycle]);
 
   const hint = s && s.inWorkflow && s.current && s.current.expectedStatus !== s.doc.status
-    ? `This is a "${s.current.layerName}" step. When you have done the work on the document (right-click menu), accept the step to pass it on.` : '';
+    ? `This is a "${s.current.layerName}" step. The status follows the workflow: accepting a Verify, Release or Publish step verifies, releases or publishes the document.` : '';
 
   return (
     <div className="modal-back" onMouseDown={() => !busy && onClose()}>
@@ -196,6 +210,7 @@ export default function WorkflowRunDialog({ doc, lang, onClose, onDone }: {
                 {mode === 'accept' && (s.current.isLast
                   ? <label className="wf-form"><label>Remark (optional)<textarea rows={3} maxLength={1000} value={hand.remark} onChange={e => setHand({ ...hand, remark: e.target.value })} /></label></label>
                   : <HandOver steps={s.steps} value={hand} onChange={setHand} />)}
+                {mode === 'accept' && (s.current.layer === 3 || s.current.layer === 4) && wfo.data?.validateOnRelease && s.doc.status !== 8 && s.doc.status !== 3 && <div className="wf-form"><label>Your password (needed to release)<input type="password" autoComplete="current-password" value={pwd} onChange={e => setPwd(e.target.value)} /></label></div>}
                 {mode === 'reject' && <div className="wf-form"><label>Reason (required)<textarea rows={3} maxLength={1000} value={reason} onChange={e => setReason(e.target.value)} /></label></div>}
               </>)}
             </>) : <div className="wf-hint">All steps are finished.</div>}

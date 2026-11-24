@@ -11,7 +11,7 @@ namespace PhaseLift.Api.Controllers;
 
 public record LoginRequest(string Login, string Password);
 public record LoginResponse(string Token, DateTime ExpiresUtc, string Login);
-public record MeRow(int IdAcc, string? AccShort, string? LangList, bool? IsProcessOwner, DateTime? LastLogin);
+public record MeRow(int IdAcc, string? AccShort, string? LangList, bool? IsProcessOwner, DateTime? LastLogin, string? Name);
 
 [ApiController, Route("api/lds")]
 public class AuthController(IConfiguration cfg, IPasswordVerifier verifier) : ControllerBase
@@ -50,12 +50,12 @@ public class AuthController(IConfiguration cfg, IPasswordVerifier verifier) : Co
         var id = int.Parse(User.FindFirstValue("idAcc")!);
         await using var con = new SqlConnection(cfg.GetConnectionString("Lds"));
         var me = await con.QueryFirstOrDefaultAsync<MeRow>(
-            "SELECT IdAcc, AccShort, LangList, IsProcessOwner, LastLogin FROM Accounts WHERE IdAcc = @id", new { id });
+            "SELECT IdAcc, AccShort, LangList, IsProcessOwner, LastLogin, (SELECT TOP 1 e.Name FROM EmailContact e WHERE e.IDEC = Accounts.IDEC) AS Name FROM Accounts WHERE IdAcc = @id", new { id });
         if (me is null) return NotFound();
         var rights = await Access.Rights(con, id);
         return Ok(new
         {
-            me.IdAcc, me.AccShort, me.LangList, me.IsProcessOwner, me.LastLogin,
+            me.IdAcc, me.AccShort, me.Name, me.LangList, me.IsProcessOwner, me.LastLogin,
             isAdmin = Access.IsAdmin(rights),
             rights = rights.Where(r => r.RCod.HasValue).Select(r => r.RCod!.Value).Distinct().OrderBy(x => x)
         });

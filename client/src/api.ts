@@ -36,7 +36,7 @@ export type GroupReport = { title: string; lang: string; generated: string; docu
   sections: { idGroup: number; name: string; path: string; docs: { idDoc: number; name: string; type?: string; version?: string; author?: string; created?: string; editor?: string; modified?: string; publisher?: string; published?: string }[] }[] };
 export type HistoryRow = { v1?: number; v2?: number; v3?: number; user?: string; modDate?: string; modDesc?: string };
 export type DocDetail = { doc: DocRow; notes?: string; processOwner?: string; paths: string[]; groupIds?: number[]; history: HistoryRow[] };
-export type Me = { idAcc: number; accShort: string; isAdmin: boolean; rights: number[]; lastLogin?: string };
+export type Me = { idAcc: number; accShort: string; name?: string; isAdmin: boolean; rights: number[]; lastLogin?: string };
 export type Lang = { lang: string; name?: string };
 export type Stat = { label: string; count: number };
 export type Stats = {
@@ -194,7 +194,19 @@ export type WebHit = { id: number; name: string; hits: number; last?: string };
 export type WebHistory = { lang: string; from: string; to: string; page: number; pageSize: number; total: number; hits: number; items: WebHit[] };
 export type AppCatchWord = { id: number; word: string; active: boolean };
 
+/** Photo of a user as an object URL, or null when the user has none (204). */
+async function fetchPhoto(id: number): Promise<string | null> {
+  const t = auth.get();
+  const r = await fetch(`${BASE}/api/lds/users/${id}/photo`, { headers: t ? { Authorization: `Bearer ${t}` } : {} });
+  if (r.status === 204 || r.status === 404) return null;
+  if (!r.ok) throw new Error(`Photo request failed (${r.status})`);
+  return URL.createObjectURL(await r.blob());
+}
+
 export const api = {
+  photo: fetchPhoto,
+  uploadPhoto: (blob: Blob) => { const f = new FormData(); f.append('file', blob, 'photo.jpg'); return req<{ saved: boolean }>('/api/lds/me/photo', { method: 'PUT', body: f }); },
+  deletePhoto: () => req<{ removed: boolean }>('/api/lds/me/photo', { method: 'DELETE' }),
   // ---- Options > Tags and Program options > Admin ----
   tags: (lang: string, kind: string, app = 0) => req<TagList>(`/api/lds/tags?lang=${encodeURIComponent(lang)}&kind=${kind}&app=${app}`),
   appTags: (lang: string) => req<AppTagList>(`/api/lds/admin/app-tags?lang=${encodeURIComponent(lang)}`),

@@ -355,6 +355,16 @@ public class WorkflowMgmtController(IConfiguration cfg, MailService mailSvc, Doc
     async Task<List<TaskRow>> RunTasks(SqlConnection con, int id, string lang, SqlTransaction? tx = null) =>
         (await con.QueryAsync<TaskRow>("SELECT * FROM CycleTasks WHERE IDDoc = @id AND Lang = @lang ORDER BY IDTask", new { id, lang }, tx)).ToList();
 
+    /// Moves the document status along with the workflow: entering an Edit step puts a Draft (or a verified document that was sent back) in Edit;
+    /// finishing a Verify step marks the document Verified. Release and Publish copy files and set expiry dates, so they stay explicit actions.
+    static async Task SyncStatus(SqlConnection con, SqlTransaction tx, int id, string lang, int? enteredLayer, int? finishedLayer, int acc)
+    {
+        if (enteredLayer == 1)
+            await con.ExecuteAsync("UPDATE Documents SET Status = 2 WHERE IDDoc = @id AND Lang = @lang AND Status IN (1, 7)", new { id, lang }, tx);
+        if (finishedLayer == 2)
+            await con.ExecuteAsync("UPDATE Documents SET Status = 7, DatePrv = @now, IdPrv = @acc WHERE IDDoc = @id AND Lang = @lang AND Status IN (1, 2)", new { id, lang, now = DateTime.Now, acc }, tx);
+    }
+
     static TaskRow? Open(List<TaskRow> t) => t.LastOrDefault(x => (x.ProcentExp ?? 0) < Done);
 
     object StepDto(MoveRow m, Dictionary<int, List<WfName>> cand, string[] layers) => new
@@ -619,6 +629,7 @@ public class WorkflowMgmtController(IConfiguration cfg, MailService mailSvc, Doc
             if (start is not null && start.IdCycMove != next.IdCycMove) await InsertTask(con, tx, taskId++, cyc.IdCycle, id, lang, Acc, now, start.IdCycMove, now, Acc, Done, "");
             await InsertTask(con, tx, taskId, cyc.IdCycle, id, lang, Acc, now, next.IdCycMove, due, editor, 0, (b.Remark ?? "").Trim());
             await con.ExecuteAsync("UPDATE Documents SET IsCycle = 1 WHERE IDDoc = @id AND Lang = @lang", new { id, lang }, tx);
+            await SyncStatus(con, tx, id, lang, next.CycMoveLayer, null, Acc);
             await tx.CommitAsync();
             mail = await AssignMail(con, id, lang, cyc.IdCycle, next, editor, due, (b.Remark ?? "").Trim(), layers);
         }
@@ -695,6 +706,7 @@ public class WorkflowMgmtController(IConfiguration cfg, MailService mailSvc, Doc
                 await InsertTask(con, tx, newId, cycle, id, lang, Acc, now, target.IdCycMove, due, editor, 0, remark);
                 pending = (cycle, target, editor, due, remark);
             }
+            await SyncStatus(con, tx, id, lang, target?.CycMoveLayer, accept ? curMove?.CycMoveLayer : null, Acc);
             await tx.CommitAsync();
             if (pending is { } pm) mail = await AssignMail(con, id, lang, pm.cycle, pm.move, pm.editor, pm.due, pm.remark, layers);
         }

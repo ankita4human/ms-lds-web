@@ -6,10 +6,11 @@ import { useLang } from './LangContext';
 import { TopProgress } from './components/Loader';
 import ChatBot from './components/ChatBot';
 import NotificationBell from './components/NotificationBell';
-import UserAvatar from './components/UserAvatar';
-import { IconChart, IconDash, IconDocs, IconFilter, IconGear, IconType, IconUsers, IconMail, IconLogout, IconSearch, IconStd, IconDep, IconFlow, IconTask, IconCatch, IconTag, IconSliders } from './components/Icons';
+import ThemeSwitch from './components/ThemeSwitch';
+import UserAvatar, { AvatarEditor } from './components/UserAvatar';
+import { IconChart, IconDash, IconDocs, IconFilter, IconGear, IconType, IconUsers, IconMail, IconLogout, IconSearch, IconStd, IconDep, IconFlow, IconTask, IconCatch, IconTag, IconSliders, IconSpark } from './components/Icons';
 
-const TITLES: Record<string, string> = { '/tasks': 'My tasks', '/options/workflows': 'Workflow management', '/options/catch': 'Catch management', '/options/tags': 'Tags', '/options/program': 'Program options', '/': 'Dashboard', '/analytics': 'Analytics', '/documents': 'Documents' };
+const TITLES: Record<string, string> = { '/assistant': 'AI Assistant', '/tasks': 'My tasks', '/options/workflows': 'Workflow management', '/options/catch': 'Catch management', '/options/tags': 'Tags', '/options/program': 'Program options', '/': 'Dashboard', '/analytics': 'Analytics', '/documents': 'Documents' };
 const KEY = 'pl_nav_collapsed';
 
 export default function Shell() {
@@ -36,6 +37,7 @@ export default function Shell() {
   }, []);
   const signOut = () => { auth.clear(); nav('/login'); };
   const name = me.data?.accShort ?? '...';
+  const fullName = me.data?.name || me.data?.accShort;
   const role = me.data?.isAdmin ? 'Administrator' : 'User';
 
   return (
@@ -44,7 +46,7 @@ export default function Shell() {
       <aside className="sidebar">
         <div className="brand"><img src="/logo-lds.png" alt="" /><div className="txt"><b>MS LDS<sup>®</sup></b><small>Document management</small></div></div>
         <div className="usercard">
-          <UserAvatar id={me.data?.idAcc} />
+          <AvatarEditor id={me.data?.idAcc} name={fullName} />
           <div className="txt"><div className="name">{name}</div><div className="role">{role}</div></div>
         </div>
         <nav className="nav">
@@ -65,6 +67,7 @@ export default function Shell() {
           {optOpen && <NavLink className="sub" to="/options/dependency" title="Dependency"><IconDep /><span className="txt">Dependency</span></NavLink>}
           {optOpen && <NavLink className="sub" to="/options/users" title="User management"><IconUsers /><span className="txt">User management</span></NavLink>}
           {optOpen && <NavLink className="sub" to="/options/distribution" title="E-mail distribution"><IconMail /><span className="txt">E-mail distribution</span></NavLink>}
+          <NavLink to="/assistant" title="AI Assistant" className="nav-ai"><IconSpark /><span className="txt">AI Assistant</span><span className="nav-new txt">AI</span></NavLink>
         </nav>
         <div className="foot"><img src="/logo-qf.png" alt="" /><span className="txt">MS QF GmbH</span></div>
       </aside>
@@ -86,16 +89,17 @@ export default function Shell() {
                 {languages.map(l => <option key={l.lang} value={l.lang}>{l.name ? `${l.name} (${l.lang})` : l.lang}</option>)}
               </select>
             </label>
+            <ThemeSwitch />
             <NotificationBell lang={lang} />
             <div className="profile" ref={menuRef}>
               <button className="profile-btn" onClick={() => setMenuOpen(o => !o)} aria-haspopup="menu" aria-expanded={menuOpen}>
-                <UserAvatar id={me.data?.idAcc} className="avatar sm" />
+                <UserAvatar id={me.data?.idAcc} className="avatar sm" name={fullName} />
                 <span className="pn"><b>{name}</b><small>{role}</small></span>
                 <span className="caret">▾</span>
               </button>
               {menuOpen && (
                 <div className="profile-menu" role="menu">
-                  <div className="pm-head"><UserAvatar id={me.data?.idAcc} /><div><b>{name}</b><small>{role}</small></div></div>
+                  <div className="pm-head"><AvatarEditor id={me.data?.idAcc} name={fullName} /><div><b>{name}</b><small>{role}</small></div></div>
                   {me.data?.lastLogin && <div className="pm-meta">Last login: {new Date(me.data.lastLogin).toLocaleString('en-GB')}</div>}
                   <button role="menuitem" onClick={signOut}><IconLogout /> Sign out</button>
                 </div>

@@ -20,8 +20,10 @@ const WorkflowManagement = lazy(() => import('./WorkflowManagement'));
 const MyTasks = lazy(() => import('./MyTasks'));
 const CatchManagement = lazy(() => import('./CatchManagement'));
 const TagsPage = lazy(() => import('./TagsPage'));
+const AssistantPage = lazy(() => import('./AssistantPage'));
 const ProgramOptions = lazy(() => import('./ProgramOptions'));
 import './theme.css';
+import './theme';
 import { LangProvider } from './LangContext';
 
 // Keep data for 5 minutes and do not refetch on window focus: the dashboard queries are heavy.
@@ -48,6 +50,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
           <Route path="options/catch" element={<Suspense fallback={<PageLoader />}><CatchManagement /></Suspense>} />
           <Route path="options/tags" element={<Suspense fallback={<PageLoader />}><TagsPage /></Suspense>} />
           <Route path="options/program" element={<Suspense fallback={<PageLoader />}><ProgramOptions /></Suspense>} />
+          <Route path="assistant" element={<Suspense fallback={<PageLoader />}><AssistantPage /></Suspense>} />
           <Route path="tasks" element={<Suspense fallback={<PageLoader />}><MyTasks /></Suspense>} />
           <Route path="options/distribution" element={<Suspense fallback={<PageLoader />}><EmailDistribution /></Suspense>} />
         </Route>

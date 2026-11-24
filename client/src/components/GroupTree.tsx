@@ -27,26 +27,43 @@ function build(groups: GroupNode[]): TreeItem[] {
   return roots;
 }
 
-function Row({ node, depth, sel, onSel, open, toggle, onMenu, busy }: {
+const PALETTE = ['#6366f1', '#0ea5e9', '#10b981', '#f59e0b', '#ec4899'];
+const colorOf = (node: { idGroup: number }, depth: number) => (node.idGroup === STANDARD_ID ? '#b7791f' : PALETTE[depth % PALETTE.length]!);
+
+const Chevron = ({ open }: { open: boolean }) => <svg className={`chev ${open ? 'op' : ''}`} width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>;
+
+/** Folder filter: a node stays when its name matches or one of its sub-groups does. */
+function filterTree(nodes: TreeItem[], q: string): TreeItem[] {
+  const out: TreeItem[] = [];
+  for (const n of nodes) {
+    const kids = filterTree(n.children, q);
+    if (n.name.toLowerCase().includes(q) || kids.length > 0) out.push({ ...n, children: n.name.toLowerCase().includes(q) && kids.length === 0 ? n.children : kids });
+  }
+  return out;
+}
+
+function Row({ node, depth, sel, onSel, open, toggle, onMenu, busy, force, q }: {
   node: TreeItem; depth: number; sel: NodeSel; onSel: (s: NodeSel) => void; open: Set<number>; toggle: (id: number) => void;
-  onMenu: (e: React.MouseEvent, n: TreeItem) => void; busy?: boolean;
+  onMenu: (e: React.MouseEvent, n: TreeItem) => void; busy?: boolean; force?: boolean; q?: string;
 }) {
-  const isOpen = open.has(node.idGroup);
+  const isOpen = force || open.has(node.idGroup);
+  const color = colorOf(node, depth);
+  const hit = !!q && node.name.toLowerCase().includes(q);
   const has = node.children.length > 0;
   return (
     <>
-      <div className={`tree-row ${sel === node.idGroup ? 'sel' : ''} ${node.accessible ? '' : 'dim'}`} style={{ paddingLeft: 8 + depth * 16 }}
+      <div className={`tree-row ${sel === node.idGroup ? 'sel' : ''} ${node.accessible ? '' : 'dim'} ${hit ? 'hit' : ''}`} style={{ ['--c' as string]: color }}
         onClick={() => { if (node.idGroup === STANDARD_ID) toggle(node.idGroup); else { onSel(node.idGroup); if (has && !isOpen) toggle(node.idGroup); } }} onDoubleClick={() => has && toggle(node.idGroup)} title={node.name}
         onContextMenu={e => onMenu(e, node)}>
-        <span className="tw" onClick={e => { e.stopPropagation(); if (has) toggle(node.idGroup); }}>{has ? (isOpen ? '▾' : '▸') : ''}</span>
-        <span>{node.idGroup === STANDARD_ID ? '🏛️' : isOpen && has ? '📂' : '📁'}</span>
+        <span className="tw" onClick={e => { e.stopPropagation(); if (has) toggle(node.idGroup); }}>{has ? <Chevron open={isOpen} /> : <i className="dotl" />}</span>
+        <span className="gi-emoji">{node.idGroup === STANDARD_ID ? '🏛️' : isOpen && has ? '📂' : '📁'}</span>
         <span className="nm">{node.name}</span>
         {node.doNotPublish && <span className="gflag" title="Not shown on the web">🚫</span>}
         {node.pubOriginal && <span className="gflag" title="Published as original">📎</span>}
         {busy && node.idGroup !== STANDARD_ID && <span className="ct ld" aria-label="Counting documents">…</span>}
         {!busy && node.docCount > 0 && node.idGroup !== STANDARD_ID && <span className="ct" title={`${node.docCount} document(s) in this folder, ${node.total} including sub-groups`}>{node.docCount}</span>}
       </div>
-      {isOpen && node.children.map(c => <Row key={c.idGroup} node={c} depth={depth + 1} sel={sel} onSel={onSel} open={open} toggle={toggle} onMenu={onMenu} busy={busy} />)}
+      {isOpen && has && <div className="tree-kids" style={{ ['--c' as string]: color }}>{node.children.map(c => <Row key={c.idGroup} node={c} depth={depth + 1} sel={sel} onSel={onSel} open={open} toggle={toggle} onMenu={onMenu} busy={busy} force={force} q={q} />)}</div>}
     </>
   );
 }
@@ -58,7 +75,10 @@ export default function GroupTreeView({ groups, total, expired, sel, onSel, root
   groups: GroupNode[]; total: number; expired: number; sel: NodeSel; onSel: (s: NodeSel, includeSub?: boolean) => void; rootLabel: string; countsLoading?: boolean; reveal?: { key: number; ids: number[] };
   isAdmin?: boolean; canCreateRoot?: boolean; templateGroup?: number; onAction?: (key: GroupMenuKey, node: GroupNode | null) => void;
 }) {
-  const roots = useMemo(() => build(groups), [groups]);
+  const allRoots = useMemo(() => build(groups), [groups]);
+  const [fq, setFq] = useState('');
+  const q = fq.trim().toLowerCase();
+  const roots = useMemo(() => (q ? filterTree(allRoots, q) : allRoots), [allRoots, q]);
   const [open, setOpen] = useState<Set<number>>(new Set());
   const toggle = (id: number) => setOpen(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
   // Expand the folders leading to a located document and scroll the selected folder into view.
@@ -134,17 +154,23 @@ export default function GroupTreeView({ groups, total, expired, sel, onSel, root
   };
   return (
     <div className="card tree-card" tabIndex={0} onKeyDown={onKey} style={{ outline: 'none' }} onContextMenu={e => { if (e.target === e.currentTarget) openMenu(e, null); }}>
-      <div className="tree-title" onContextMenu={e => openMenu(e, null)} title="Right-click for the root menu"><span>{rootLabel}</span>
-        <span><button className="btn-ghost" style={{ padding: '2px 8px', fontSize: 12 }} onClick={expandAll}>Expand</button>{' '}
-          <button className="btn-ghost" style={{ padding: '2px 8px', fontSize: 12 }} onClick={() => setOpen(new Set())}>Collapse</button></span>
+      <div className="tree-title" onContextMenu={e => openMenu(e, null)} title="Right-click for the root menu">
+        <span className="tt-l"><span className="tt-ico" aria-hidden="true">🗂️</span><span>{rootLabel}</span></span>
+        <span className="tt-btns">
+          <button className="tt-btn" onClick={expandAll} title="Expand all folders" aria-label="Expand all folders"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M7 8l5-5 5 5M7 16l5 5 5-5" /></svg></button>
+          <button className="tt-btn" onClick={() => setOpen(new Set())} title="Collapse all folders" aria-label="Collapse all folders"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M7 4l5 5 5-5M7 20l5-5 5 5" /></svg></button>
+        </span>
       </div>
-      <div className={`tree-row ${sel === 'all' ? 'sel' : ''}`} onClick={() => onSel('all')} onContextMenu={e => openMenu(e, null)}>
-        <span className="tw" /><span>🗂️</span><span className="nm">All documents</span><span className={`ct ${countsLoading ? 'ld' : ''}`}>{countsLoading ? '…' : total}</span>
+      <div className="tree-search"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
+        <input value={fq} onChange={e => setFq(e.target.value)} placeholder="Find a folder…" aria-label="Find a folder" />{fq && <button onClick={() => setFq('')} aria-label="Clear">×</button>}</div>
+      <div className={`tree-row top all ${sel === 'all' ? 'sel' : ''}`} onClick={() => onSel('all')} onContextMenu={e => openMenu(e, null)}>
+        <span className="tw" /><span className="gi-emoji">🗂️</span><span className="nm">All documents</span><span className={`ct ${countsLoading ? 'ld' : ''}`}>{countsLoading ? '…' : total}</span>
       </div>
-      {roots.map(r => <Row key={r.idGroup} node={r} depth={0} sel={sel} onSel={onSel} open={open} toggle={toggle} onMenu={openMenu} busy={countsLoading} />)}
+      {roots.map(r => <Row key={r.idGroup} node={r} depth={0} sel={sel} onSel={onSel} open={open} toggle={toggle} onMenu={openMenu} busy={countsLoading} force={!!q} q={q} />)}
+      {q && roots.length === 0 && <div className="mh" style={{ padding: '10px 14px' }}>No folder matches “{fq}”.</div>}
       <div className="sep" style={{ height: 1, background: 'var(--line)', margin: '8px 4px' }} />
-      <div className={`tree-row ${sel === 'expired' ? 'sel' : ''}`} onClick={() => onSel('expired')}>
-        <span className="tw" /><span>⛔</span><span className="nm">Expired documents</span><span className={`ct ${countsLoading ? 'ld' : ''}`}>{countsLoading ? '…' : expired}</span>
+      <div className={`tree-row top exp ${sel === 'expired' ? 'sel' : ''}`} onClick={() => onSel('expired')}>
+        <span className="tw" /><span className="gi-emoji">⛔</span><span className="nm">Expired documents</span><span className={`ct ${countsLoading ? 'ld' : ''}`}>{countsLoading ? '…' : expired}</span>
       </div>
       {ctx && <ContextMenu x={ctx.x} y={ctx.y} items={items(ctx.node)} onPick={pick} onClose={() => setCtx(null)} />}
     </div>

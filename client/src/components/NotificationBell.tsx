@@ -71,6 +71,8 @@ export default function NotificationBell({ lang }: { lang: string }) {
   const sum = useQuery({ queryKey: ['wf-summary'], queryFn: api.wfSummary, refetchInterval: 30_000, refetchOnWindowFocus: true, staleTime: 10_000 });
   const tasks = sum.data?.enabled ? sum.data.items : [];
   const taskTotal = sum.data?.enabled ? sum.data.total : 0;
+  const meQ = useQuery({ queryKey: ['me'], queryFn: api.me });
+  const myName = meQ.data?.name || meQ.data?.accShort;
   const data = q.data;
   const me = data?.me;
   const jobs = data?.jobs ?? [];
@@ -164,7 +166,7 @@ export default function NotificationBell({ lang }: { lang: string }) {
 
   return (
     <div className="nb" ref={box}>
-      <button className={`nb-btn ${badge > 0 ? 'ring' : ''} ${open ? 'on' : ''}`} onClick={toggle} aria-haspopup="dialog" aria-expanded={open}
+      <button className={`nb-btn ${badge > 0 ? 'nb-shake' : ''} ${open ? 'on' : ''}`} onClick={toggle} aria-haspopup="dialog" aria-expanded={open}
         aria-label={badge > 0 ? `Notifications, ${badge} new` : 'Notifications'} title="Notifications">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.7 21a2 2 0 0 1-3.4 0" /></svg>
@@ -229,7 +231,7 @@ export default function NotificationBell({ lang }: { lang: string }) {
                   return (
                     <button key={key(i)} className={`nb-item ${fresh.has(key(i)) ? 'new' : ''}`} onClick={() => { setOpen(false); nav(`/documents?doc=${i.idDoc}`); }}>
                       <span className="nb-av">
-                        {mine ? <UserAvatar id={me} className="nb-me" /> : <span className="nb-av-i" style={{ background: colorOf(i.publishedBy) }}>{initials(i.publishedBy)}</span>}
+                        {mine ? <UserAvatar id={me} className="nb-me" name={myName} /> : <span className="nb-av-i" style={{ background: colorOf(i.publishedBy) }}>{initials(i.publishedBy)}</span>}
                         <span className="nb-ft" style={{ background: f.c }} title={i.ext ? `.${i.ext}` : 'file'}>{f.t}</span>
                       </span>
                       <span className="nb-tx">

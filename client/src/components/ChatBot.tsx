@@ -1,170 +1,118 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { api, type DocQuery, type DocRow } from '../api';
+import { api } from '../api';
 import { useLang } from '../LangContext';
-import { StatusBadge, fmtDate } from './bits';
 import { IconSend } from './Icons';
+import { respond, type Ctx, type Msg } from './assistantEngine';
+import { MessageExtras, Stream, hhmm } from './AssistantParts';
+import { loadConvs, newConv, saveConvs, setActive, titleOf } from './assistantStore';
 
-/* ---------- Prompt understanding (rule based, runs in the browser; no external AI service) ---------- */
-const STATUS: [RegExp, number, string][] = [
-  [/\bdrafts?\b/, 1, 'Draft'], [/\b(in edit|editing|in progress)\b/, 2, 'Edit'], [/\bpublished\b/, 3, 'Published'],
-  [/\bpresent\b/, 4, 'Present'], [/\barchived?\b/, 5, 'Archived'], [/\bverified\b/, 7, 'Verified'],
-  [/\breleased\b/, 8, 'Released'], [/\bblocked\b/, 9, 'Blocked'], [/\bfrozen\b/, 11, 'Frozen'],
+const GROUPS: { title: string; items: { ico: string; label: string; q: string }[] }[] = [
+  { title: 'Find', items: [
+    { ico: '🔎', label: 'Search by name', q: 'Search "quality manual"' }, { ico: '🚀', label: 'Published', q: 'Show published documents' },
+    { ico: '⏳', label: 'Expired', q: 'Expired documents' }, { ico: '✍️', label: 'My drafts', q: 'Drafts created by me' }] },
+  { title: 'My work', items: [
+    { ico: '✅', label: 'My pending tasks', q: 'Show my pending tasks' }, { ico: '📊', label: 'System overview', q: 'Give me an overview' }] },
+  { title: 'Learn', items: [
+    { ico: '🧭', label: 'Walk me through adding a document', q: 'Walk me through adding a document' }, { ico: '🔀', label: 'How workflow works', q: 'How does a workflow work?' },
+    { ico: '🏷️', label: 'Status life cycle', q: 'What do the statuses mean?' }, { ico: '⌨️', label: 'Shortcuts', q: 'Show shortcuts' }] },
 ];
-const FILLER = new Set(('show me list find search get give all the a an of for with documents document docs doc files file please ' +
-  'which are is that who whose have has had status named called name containing contains about on in by from to and or my me i what how many count total number').split(' '));
+const SUGGEST = ['Show my pending tasks', 'Give me an overview', 'How do I release a document?', 'Expired documents', 'Help'];
+const STORE = 'pl_bot_v3';
+let seq = Date.now();
+const SPARK = <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l1.8 4.6L18.5 9l-4.7 1.4L12 15l-1.8-4.6L5.5 9l4.7-1.4z" /><path d="M19 15l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z" /></svg>;
 
-type Parsed = { q: DocQuery; chips: string[]; countOnly: boolean; help: boolean; idOnly?: number };
-
-export function parsePrompt(raw: string, me: string): Parsed {
-  let t = ' ' + raw.toLowerCase().replace(/[?!]/g, ' ').replace(/\s+/g, ' ').trim() + ' ';
-  const q: DocQuery = { page: 1, pageSize: 8, sort: 'modified', desc: true };
-  const chips: string[] = [];
-  const take = (re: RegExp) => { const m = t.match(re); if (m) t = t.replace(m[0], ' '); return m; };
-  if (/^\s*(help|\?|what can you do)\s*$/.test(t)) return { q, chips, countOnly: false, help: true };
-
-  const countOnly = /\b(how many|count|number of|total)\b/.test(t);
-
-  // document id: "id 123", "doc #123", "document 123", or a bare number
-  const idm = take(/\b(?:id|doc|document|no\.?|#)\s*[:#]?\s*(\d{1,9})\b/) ?? take(/^\s*#?(\d{1,9})\s*$/);
-  if (idm) { q.text = idm[1]; chips.push(`ID ${idm[1]}`); return { q, chips, countOnly, help: false, idOnly: Number(idm[1]) }; }
-
-  // people: "published by X", "released by X", "created/authored/written by X"
-  const person = (verbs: string) => take(new RegExp(`\\b(?:${verbs})\\s+by\\s+(me|[\\w.\\-@]+)`));
-  const pub = person('published|publish'), rel = person('released|release'), cre = person('created|authored|written|made|uploaded|owned');
-  const who = (v: string) => (v === 'me' ? me : v);
-  if (pub) { q.publisher = who(pub[1]); chips.push(`Publisher: ${q.publisher}`); }
-  if (rel) { q.releaser = who(rel[1]); chips.push(`Releaser: ${q.releaser}`); }
-  if (cre) { q.creator = who(cre[1]); chips.push(`Creator: ${q.creator}`); }
-  // "by X" alone, or "my documents"
-  const by = take(/\bby\s+(me|[\w.\-@]+)/);
-  const mine = !by && take(/\b(my|mine)\b/);
-  const person2 = by ? who(by[1]) : mine ? me : undefined;
-
-  // status words
-  for (const [re, id, name] of STATUS) if (re.test(t)) { q.status = id; chips.push(`Status: ${name}`); t = t.replace(re, ' '); break; }
-  if (/\b(expired|overdue|out of date)\b/.test(t)) { q.expired = true; chips.push('Expired'); t = t.replace(/\b(expired|overdue|out of date)\b/, ' '); }
-
-  if (person2) {
-    if (q.status === 3 && !q.publisher) { q.publisher = person2; chips.push(`Publisher: ${person2}`); }
-    else if (q.status === 8 && !q.releaser) { q.releaser = person2; chips.push(`Releaser: ${person2}`); }
-    else if (!q.creator && !q.publisher && !q.releaser) { q.creator = person2; chips.push(`Creator: ${person2}`); }
-  }
-
-  // free text: a quoted phrase wins, otherwise whatever is left after removing filler words
-  const quoted = raw.match(/["“'](.+?)["”']/);
-  let text = quoted ? quoted[1] : t.split(' ').filter(w => w && !FILLER.has(w)).join(' ');
-  text = text.trim();
-  if (text) { q.text = text; chips.push(`Name contains “${text}”`); }
-  return { q, chips, countOnly, help: false };
-}
-
-/* ---------- UI ---------- */
-type Msg = { from: 'bot' | 'me'; text?: string; chips?: string[]; docs?: DocRow[]; total?: number; query?: DocQuery };
-
-const SUGGEST = [
-  'Show published documents', 'Documents published by martin', 'Released by me',
-  'How many drafts?', 'Expired documents', 'Find document 1001', 'Search "quality manual"',
-];
-
-const WELCOME: Msg = {
-  from: 'bot',
-  text: 'Hi! I am the LDS assistant. Ask me for documents by name, ID, status, or who created, published or released them.',
-};
-
+/** Floating assistant (bottom right). Same engine as the full AI Assistant page, which it can hand the conversation over to. */
 export default function ChatBot() {
   const { lang } = useLang();
   const nav = useNavigate();
+  const loc = useLocation();
   const me = useQuery({ queryKey: ['me'], queryFn: api.me, staleTime: Infinity });
   const [open, setOpen] = useState(false);
+  const [wide, setWide] = useState(false);
   const [busy, setBusy] = useState(false);
   const [input, setInput] = useState('');
-  const [msgs, setMsgs] = useState<Msg[]>([WELCOME]);
+  const [msgs, setMsgs] = useState<Msg[]>(() => { try { return (JSON.parse(sessionStorage.getItem(STORE) ?? '{}') as { m?: Msg[] }).m ?? []; } catch { return []; } });
+  const ctx = useRef<Ctx>((() => { try { return (JSON.parse(sessionStorage.getItem(STORE) ?? '{}') as { c?: Ctx }).c ?? {}; } catch { return {}; } })());
   const end = useRef<HTMLDivElement>(null);
-  useEffect(() => { end.current?.scrollIntoView({ behavior: 'smooth' }); }, [msgs, busy, open]);
+  const inp = useRef<HTMLInputElement>(null);
+  const fresh = useRef(Date.now());
+  useEffect(() => { end.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }); }, [msgs, busy, open]);
+  useEffect(() => { try { sessionStorage.setItem(STORE, JSON.stringify({ m: msgs.slice(-30), c: ctx.current })); } catch { /* full */ } }, [msgs]);
+  useEffect(() => { if (open) setTimeout(() => inp.current?.focus(), 60); }, [open]);
+  useEffect(() => { if (!open) return; const f = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); }; window.addEventListener('keydown', f); return () => window.removeEventListener('keydown', f); }, [open]);
+
+  if (loc.pathname.startsWith('/assistant')) return null;   // the full page has its own chat
+
+  const first = (me.data?.name || me.data?.accShort || '').split(/[ ,]/)[0] ?? '';
+  const hour = new Date().getHours();
+  const greet = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+  const go = (to: string) => { nav(to); setOpen(false); };
+  const env = { lang, name: me.data?.name ?? '', short: me.data?.accShort ?? '' };
 
   async function ask(prompt: string) {
     const text = prompt.trim();
     if (!text || busy) return;
     setInput('');
-    setMsgs(m => [...m, { from: 'me', text }]);
-    const p = parsePrompt(text, me.data?.accShort ?? '');
-    if (p.help) {
-      setMsgs(m => [...m, { from: 'bot', text: 'Try: “published documents by martin”, “drafts created by me”, “released by anna”, “expired documents”, “document 1234”, “how many verified?”, or a name such as “quality manual”.' }]);
-      return;
-    }
-    if (!p.chips.length) {
-      setMsgs(m => [...m, { from: 'bot', text: 'I could not find anything to search for in that. Type a name, an ID, a status, or “published by <user>”. Type “help” for examples.' }]);
-      return;
-    }
+    setMsgs(a => [...a, { id: ++seq, from: 'me', time: Date.now(), text }]);
     setBusy(true);
     try {
-      const res = await api.documents({ ...p.q, lang, pageSize: p.countOnly ? 1 : 8, withPaths: !p.countOnly });
-      setMsgs(m => [...m, {
-        from: 'bot', chips: p.chips, total: res.total, query: p.q,
-        docs: p.countOnly ? [] : res.items,
-        text: res.total === 0 ? 'No documents match that (within the groups you may access).'
-          : p.countOnly ? `${res.total} document${res.total === 1 ? '' : 's'} match.`
-          : `Found ${res.total} document${res.total === 1 ? '' : 's'}${res.total > res.items.length ? `, showing the latest ${res.items.length}` : ''}.`,
-      }]);
+      const r = await respond(text, env, ctx.current);
+      setMsgs(a => [...a, { ...r, id: ++seq, from: 'bot', time: Date.now() }]);
+      if (r.navigate) setTimeout(() => go(r.navigate!), 450);
     } catch (e) {
-      setMsgs(m => [...m, { from: 'bot', text: 'Sorry, the search failed: ' + (e as Error).message }]);
+      setMsgs(a => [...a, { id: ++seq, from: 'bot', time: Date.now(), text: 'Sorry, that did not work: ' + (e as Error).message }]);
     } finally { setBusy(false); }
   }
-
   const submit = (e: FormEvent) => { e.preventDefault(); void ask(input); };
+  const clear = () => { setMsgs([]); ctx.current = {}; setInput(''); try { sessionStorage.removeItem(STORE); } catch { /* ignore */ } };
+  const toPage = () => {
+    const c = newConv();
+    if (msgs.length) { c.msgs = msgs; c.ctx = ctx.current; c.title = titleOf(msgs.find(m => m.from === 'me')?.text ?? ''); saveConvs([c, ...loadConvs()]); setActive(c.id); }
+    clear(); go('/assistant');
+  };
+  const last = msgs[msgs.length - 1];
 
   return (
     <>
       <button className={`bot-fab ${open ? 'open' : ''}`} onClick={() => setOpen(o => !o)} aria-label={open ? 'Close assistant' : 'Open assistant'}>
-        {open ? '✕' : <><span className="bot-ico">💬</span><span className="bot-fab-text">Ask LDS</span></>}
+        {open ? '✕' : <><span className="bot-ico">{SPARK}</span><span className="bot-fab-text">Ask MS LDS</span></>}
       </button>
       {open && (
-        <div className="bot-panel" role="dialog" aria-label="LDS assistant">
+        <div className={`bot-panel ${wide ? 'wide' : ''}`} role="dialog" aria-label="LDS assistant">
           <div className="bot-head">
-            <div className="bot-avatar">AI</div>
-            <div style={{ flex: 1 }}><b>LDS Assistant</b><small>Search documents in plain words</small></div>
-            <button className="bot-clear" onClick={() => { setMsgs([WELCOME]); setInput(''); }} disabled={msgs.length <= 1} title="Clear chat">🗑 Clear</button>
+            <div className="bot-avatar">{SPARK}<i className="bot-dot" /></div>
+            <div style={{ flex: 1, minWidth: 0 }}><b>LDS Assistant</b><small>Documents · Tasks · Manual answers</small></div>
+            <button className="bot-ib" onClick={toPage} title="Open the full AI Assistant" aria-label="Open full assistant">↗</button>
+            <button className="bot-ib" onClick={() => setWide(w => !w)} title={wide ? 'Smaller' : 'Larger'} aria-label="Resize">{wide ? '⤡' : '⤢'}</button>
+            <button className="bot-ib" onClick={clear} disabled={msgs.length === 0} title="New chat" aria-label="New chat">⟲</button>
           </div>
           <div className="bot-body">
+            {msgs.length === 0 && (
+              <div className="bot-welcome">
+                <div className="bot-hello"><span>👋</span><div><b>{greet}{first ? `, ${first}` : ''}!</b><small>Ask in plain words (typos are fine) or pick a shortcut.</small></div></div>
+                {GROUPS.map(g => (
+                  <div key={g.title} className="bot-grp"><h6>{g.title}</h6>
+                    <div className="bot-tiles">{g.items.map(i => <button key={i.label} onClick={() => void ask(i.q)}><span>{i.ico}</span>{i.label}</button>)}</div></div>))}
+              </div>
+            )}
             {msgs.map((m, i) => (
-              <div key={i} className={`bot-msg ${m.from}`}>
-                {m.text && <div className="bot-bubble">{m.text}</div>}
-                {m.chips && <div className="bot-chips">{m.chips.map(c => <span key={c}>{c}</span>)}</div>}
-                {m.docs && m.docs.length > 0 && (
-                  <div className="bot-results">
-                    {m.docs.map(d => (
-                      <button key={`${d.idDoc}${d.lang}`} className="bot-doc" onClick={() => { nav(`/documents?doc=${d.idDoc}`); setOpen(false); }}>
-                        <div className="bot-doc-top"><b>#{d.idDoc}</b><StatusBadge id={d.status} name={d.statusName} /></div>
-                        <div className="bot-doc-name">{d.docName}</div>
-                        {d.paths && d.paths.length > 0 && (
-                          <div className="bot-doc-path" title={d.paths.join('\n')}>
-                            📁 {d.paths[0].split(' / ').map((p, i, a) => <span key={i}>{p}{i < a.length - 1 && <em> › </em>}</span>)}
-                            {d.paths.length > 1 && <small> +{d.paths.length - 1} more</small>}
-                          </div>
-                        )}
-                        <div className="bot-doc-meta">
-                          {d.publisher ? `Published by ${d.publisher}${d.datePub ? ' · ' + fmtDate(d.datePub) : ''}` : d.creator ? `Created by ${d.creator}` : ''}
-                          {d.releaser ? ` · Released by ${d.releaser}` : ''}
-                        </div>
-                      </button>
-                    ))}
-                    {m.query?.text && !m.query.creator && !m.query.publisher && !m.query.releaser && m.total! > m.docs.length && (
-                      <button className="bot-more" onClick={() => { nav(`/documents?q=${encodeURIComponent(m.query!.text!)}`); setOpen(false); }}>
-                        Open all {m.total} in Documents
-                      </button>
-                    )}
-                  </div>
-                )}
+              <div key={m.id} className={`bot-msg ${m.from}`}>
+                {m.from === 'bot' && <div className="bot-mav" aria-hidden="true">AI</div>}
+                <div className="bot-col">
+                  {m.text && <div className="bot-bubble">{m.from === 'bot' ? <Stream text={m.text} animate={m.time > fresh.current && i === msgs.length - 1} onTick={() => end.current?.scrollIntoView({ block: 'end' })} /> : m.text}</div>}
+                  {m.from === 'bot' && <MessageExtras m={m} go={go} ask={q => void ask(q)} showFollow={i === msgs.length - 1} busy={busy} />}
+                  <small className="bot-time">{hhmm(m.time)}</small>
+                </div>
               </div>
             ))}
-            {busy && <div className="bot-msg bot"><div className="bot-bubble typing"><i /><i /><i /></div></div>}
+            {busy && <div className="bot-msg bot"><div className="bot-mav" aria-hidden="true">AI</div><div className="bot-bubble typing"><i /><i /><i /></div></div>}
             <div ref={end} />
           </div>
-          <div className="bot-suggest">{SUGGEST.map(s => <button key={s} onClick={() => void ask(s)}>{s}</button>)}</div>
+          {msgs.length > 0 && !last?.follow && <div className="bot-suggest">{SUGGEST.map(s => <button key={s} onClick={() => void ask(s)}>{s}</button>)}</div>}
           <form className="bot-input" onSubmit={submit}>
-            <input value={input} onChange={e => setInput(e.target.value)} placeholder="e.g. published documents by martin" aria-label="Message" />
+            <input ref={inp} value={input} onChange={e => setInput(e.target.value)} placeholder="Ask anything about documents, tasks or MS LDS…" aria-label="Message" maxLength={300} />
             <button type="submit" disabled={busy || !input.trim()} aria-label="Send"><IconSend /></button>
           </form>
         </div>
