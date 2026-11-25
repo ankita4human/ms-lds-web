@@ -171,3 +171,48 @@ export function DependentsDialog({ doc, lang, onClose, onDone }: { doc: { idDoc:
     </Modal>
   );
 }
+
+/** Several documents at once (legacy changeDocumentExpDateAndStatusForAll): Frozen or Defrozen one after the other; per document the default e-mail is sent when SMTP and recipients exist. */
+export function BulkFrozenDialog({ kind, docs, lang, onClose, onFinished }: { kind: 'freeze' | 'defreeze'; docs: DocRow[]; lang: string; onClose: () => void; onFinished: (queued: boolean) => void }) {
+  const qc = useQueryClient();
+  const ok = docs.filter(d => kind === 'freeze' ? d.status === 3 || d.status === 6 || d.status === 8 : d.status === 11);
+  const [exp, setExp] = useState(''); const [mail, setMail] = useState(true);
+  const [busy, setBusy] = useState(false); const [done, setDone] = useState<{ id: number; name: string; ok: boolean; t: string }[] | null>(null);
+  const [at, setAt] = useState(0);
+  async function go() {
+    setBusy(true); const out: { id: number; name: string; ok: boolean; t: string }[] = []; let queued = false;
+    for (let i = 0; i < ok.length; i++) {
+      const d = ok[i]!; setAt(i + 1);
+      try {
+        if (kind === 'freeze') {
+          let payload;
+          if (mail) { try { const m = await api.mailDraft(d.idDoc, lang, 'frozen'); if (m.smtpOk && m.to.length) payload = { send: true, to: m.to.map(r => r.email), cc: m.cc.map(r => r.email), subject: m.subject, html: sanitizeHtml(m.html), header: m.header, footer: m.footer }; } catch { /* no mail */ } }
+          const r = await api.freezeDoc(d.idDoc, lang, null, payload); queued = true;
+          out.push({ id: d.idDoc, name: d.docName, ok: true, t: `Frozen${r.mailSent ? ', mail sent' : r.mailError ? `, mail failed: ${r.mailError}` : ''}` });
+        } else {
+          const r = await api.defreezeDoc(d.idDoc, lang, exp || null); out.push({ id: d.idDoc, name: d.docName, ok: true, t: `Edit, version ${r.version}` });
+        }
+      } catch (e) { out.push({ id: d.idDoc, name: d.docName, ok: false, t: errText(e) }); }
+    }
+    setDone(out); setBusy(false); await refresh(qc); onFinished(queued);
+  }
+  const title = kind === 'freeze' ? '❄️ Frozen' : '🔥 Defrozen';
+  return (
+    <Modal title={`${title}: ${docs.length} documents`} sub={`${ok.length} can be ${kind === 'freeze' ? 'frozen' : 'defrozen'} · ${lang}`} busy={busy} onClose={onClose} width={640}
+      foot={done ? <button className="btn-primary" style={{ width: 'auto' }} onClick={onClose}>Close</button>
+        : <><button className="btn-ghost" onClick={onClose} disabled={busy}>Cancel</button><button className="btn-primary" style={{ width: 'auto' }} onClick={go} disabled={busy || ok.length === 0}>{busy ? <><Spinner /> {at}/{ok.length}</> : kind === 'freeze' ? 'Freeze all' : 'Defrost all'}</button></>}>
+      <div style={{ display: 'grid', gap: 10 }}>
+        {!done && (kind === 'freeze'
+          ? <><p style={{ margin: 0 }}>Each document gets status <b>Frozen</b>, version <b>999.999.999</b>, “do not expire” for good, an archive copy, and is published again.</p>
+            <label className="fm-chk"><input type="checkbox" checked={mail} onChange={e => setMail(e.target.checked)} />Send the default e-mail for every document (when SMTP and recipients are set up)</label></>
+          : <><p style={{ margin: 0 }}>Each document returns to <b>Edit</b> with its last real version + 1.</p>
+            <label className="fm-row" style={{ gridTemplateColumns: '150px 1fr' }}>New expiry date<input type="date" value={exp} onChange={e => setExp(e.target.value)} style={{ padding: '8px 10px', border: '1px solid #d0d5dd', borderRadius: 10, font: 'inherit' }} /></label>
+            <small className="mh">Leave empty to use the lifetime of each document type.</small></>)}
+        <div className="um-list" style={{ maxHeight: 260, overflow: 'auto' }}>
+          {(done ?? docs.map(d => ({ id: d.idDoc, name: d.docName, ok: ok.includes(d), t: ok.includes(d) ? 'Ready' : kind === 'freeze' ? 'Only released, published or expired documents' : 'Not frozen' }))).map(x =>
+            <div key={x.id} className="um-item" style={{ display: 'flex', gap: 8, opacity: x.ok ? 1 : .55 }}><span>{x.ok ? '✅' : '⚠️'}</span><span style={{ flex: 1 }}>#{x.id} {x.name}</span><small className="mh">{x.t}</small></div>)}
+        </div>
+      </div>
+    </Modal>
+  );
+}

@@ -28,6 +28,7 @@ public class DocumentRow
     public DateTime? DateRel { get; set; }
     public bool DoNotExpire { get; set; }
     public bool IsCycle { get; set; }
+    public bool DoNotPublish { get; set; }
     public string? Creator { get; set; }
     public string? Publisher { get; set; }
     public string? Releaser { get; set; }
@@ -66,7 +67,7 @@ public class DocumentsController(IConfiguration cfg) : ControllerBase
 SELECT d.IDDoc, d.DocName, d.Lang, d.LangStandard, d.[Status],
        ISNULL(s.StatusDesc, CASE d.[Status] WHEN 11 THEN 'Frozen' ELSE CONCAT('Status ', d.[Status]) END) AS StatusName, d.[Type],
        REPLACE(ISNULL(t.TypeDesc, CONCAT('Type ', d.[Type])), '<DE>', '') AS TypeName,
-       d.V1, d.V2, d.V3, d.Extension, d.DateCre, d.DateMod, d.DateExp, d.DatePub, d.DateRel, CAST(ISNULL(d.DoNotExpire, 0) AS bit) AS DoNotExpire, CAST(ISNULL(d.IsCycle, 0) AS bit) AS IsCycle,
+       d.V1, d.V2, d.V3, d.Extension, d.DateCre, d.DateMod, d.DateExp, d.DatePub, d.DateRel, CAST(ISNULL(d.DoNotExpire, 0) AS bit) AS DoNotExpire, CAST(ISNULL(d.IsCycle, 0) AS bit) AS IsCycle, CAST(ISNULL(d.DoNotPublish, 0) AS bit) AS DoNotPublish,
        cre.AccShort AS Creator, pub.AccShort AS Publisher, rel.AccShort AS Releaser
 FROM Documents d
 OUTER APPLY (SELECT TOP 1 StatusDesc FROM [Status] WHERE IDStatus = d.[Status] AND Lang = d.Lang) s

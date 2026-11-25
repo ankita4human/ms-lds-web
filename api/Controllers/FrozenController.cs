@@ -7,6 +7,7 @@ using Microsoft.Extensions.Caching.Memory;
 
 namespace PhaseLift.Api.Controllers;
 
+public class FrozenOptionsBody { public bool Enabled { get; set; } public bool DoNotExpire { get; set; } }
 public class FreezeBody { public string? Lang { get; set; } public DateTime? Expires { get; set; } public MailPayload? Mail { get; set; } }
 public class DefreezeBody { public string? Lang { get; set; } public DateTime? Expires { get; set; } }
 public class ExpiryBody { public string? Lang { get; set; } public DateTime? DateExp { get; set; } public bool? DoNotExpire { get; set; } }
@@ -72,6 +73,25 @@ public class FrozenController(IConfiguration cfg, IMemoryCache cache, PublishQue
         var rights = await Access.Rights(con, Acc);
         return Ok(new { enabled = await CfgInt(con, "EnableFrozen", 0) == 1, canManage = Access.IsAdmin(rights) || rights.Any(r => r.RCod == RightAdminDoc),
             doNotExpire = await CfgInt(con, "LDSIsEnableDoNotExpire", 0) == 1 });
+    }
+
+    /// Switch the Frozen / Defrozen feature (Config EnableFrozen) and "Do not expire" (LDSIsEnableDoNotExpire) on or off: Program options > Admin, administrators only.
+    [HttpPut("frozen/options")]
+    public async Task<IActionResult> SetOptions([FromBody] FrozenOptionsBody b)
+    {
+        await using var con = Con(); await con.OpenAsync();
+        if (!Access.IsAdmin(await Access.Rights(con, Acc))) return Err(403, "Only administrators can change the program options.");
+        try
+        {
+            foreach (var (name, on) in new[] { ("EnableFrozen", b.Enabled), ("LDSIsEnableDoNotExpire", b.DoNotExpire) })
+            {
+                var v = on ? "1" : "0";
+                var n = await con.ExecuteAsync("UPDATE Config SET FValue = @v WHERE FName = @name", new { v, name });
+                if (n == 0) await con.ExecuteAsync("INSERT INTO Config (FName, FType, FValue) VALUES (@name, 'int32', @v)", new { v, name });
+            }
+        }
+        catch (SqlException e) when (e.Number is 229 or 262 or 230) { return Err(403, "The database login may not change Config (UPDATE/INSERT on Config). " + e.Message); }
+        return Ok(new { enabled = b.Enabled, doNotExpire = b.DoNotExpire });
     }
 
     [HttpPost("documents/{id:int}/freeze")]

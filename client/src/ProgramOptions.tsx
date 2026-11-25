@@ -8,8 +8,9 @@ import ConfirmDialog from './components/ConfirmDialog';
 import { IconSliders } from './components/Icons';
 import PageHero from './components/PageHero';
 import Toast from './components/Toast';
+import { Switch } from './components/FormBits';
 
-type Panel = null | 'deleted' | 'links' | 'tags' | 'catch' | 'web';
+type Panel = null | 'deleted' | 'links' | 'tags' | 'catch' | 'web' | 'frozen';
 type Msg = { ok: boolean; t: string } | null;
 const CARDS: { id: Exclude<Panel, null>; icon: string; title: string; text: string }[] = [
   { id: 'deleted', icon: '🗑️', title: 'View deleted documents', text: 'Shows you all deleted documents of the system.' },
@@ -17,6 +18,7 @@ const CARDS: { id: Exclude<Panel, null>; icon: string; title: string; text: stri
   { id: 'tags', icon: '🏷️', title: 'Application Level Tags', text: 'Create application level tags' },
   { id: 'catch', icon: '🔑', title: 'Application level catchWords', text: 'Create application level catchWords' },
   { id: 'web', icon: '🌐', title: 'Web History', text: 'View access history of documents on web' },
+  { id: 'frozen', icon: '❄️', title: 'Frozen / Defrozen', text: 'Switch the Frozen and Defrozen document feature on or off' },
 ];
 const fmt = (s?: string | null) => s ? new Date(s).toLocaleString() : '';
 const day = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -51,6 +53,7 @@ export default function ProgramOptions() {
           {panel === 'tags' && <TagsPanel setMsg={setMsg} />}
           {panel === 'catch' && <CatchPanel setMsg={setMsg} />}
           {panel === 'web' && <WebPanel setMsg={setMsg} />}
+          {panel === 'frozen' && <FrozenPanel setMsg={setMsg} />}
         </>)}
       </div>
       <Toast msg={msg} onClose={() => setMsg(null)} />
@@ -212,4 +215,32 @@ function WebPanel({ setMsg }: { setMsg: (m: Msg) => void }) {
     {step === 1 && <ConfirmDialog danger title="Delete the web history?" confirmLabel="Continue" message={<>All web access records from <b>{from}</b> to <b>{to}</b> (all languages) will be deleted.</>} onConfirm={() => setStep(2)} onCancel={() => setStep(0)} />}
     {step === 2 && <ConfirmDialog danger title="Really delete?" confirmLabel="Delete permanently" busy={busy} message={<>This cannot be undone. Delete the web history of {from} – {to}?</>} onConfirm={remove} onCancel={() => setStep(0)} />}
   </>);
+}
+
+/** Frozen / Defrozen (manual p. 163-167): the feature is off until Config EnableFrozen = 1. "Do not expire" (LDSIsEnableDoNotExpire) is needed for the expiry options. */
+function FrozenPanel({ setMsg }: { setMsg: (m: Msg) => void }) {
+  const qc = useQueryClient();
+  const q = useQuery({ queryKey: ['frozen-options'], queryFn: api.frozenOptions });
+  const [on, setOn] = useState(false); const [dne, setDne] = useState(false); const [busy, setBusy] = useState(false);
+  useEffect(() => { if (q.data) { setOn(q.data.enabled); setDne(q.data.doNotExpire); } }, [q.data]);
+  const dirty = !!q.data && (on !== q.data.enabled || dne !== q.data.doNotExpire);
+  async function save() {
+    setBusy(true);
+    try { await api.setFrozenOptions(on, dne); await qc.invalidateQueries({ queryKey: ['frozen-options'] }); setMsg({ ok: true, t: on ? 'Frozen / Defrozen is switched on. Right-click a published, released or expired document.' : 'Frozen / Defrozen is switched off.' }); }
+    catch (e) { setMsg({ ok: false, t: (e as Error).message }); } finally { setBusy(false); }
+  }
+  if (q.isLoading) return <PageLoader compact label="Loading" />;
+  return (
+    <div style={{ display: 'grid', gap: 14, maxWidth: 640 }}>
+      <Switch checked={on} onChange={setOn} label="❄️ Enable Frozen / Defrozen" desc="Adds “Frozen” and “Defrozen” to the right-click menu of documents (right: Admin or Admin document)." />
+      <Switch checked={dne} onChange={setDne} label="Enable “Do not expire”" desc="Lets administrators switch off the expiry of a document. Frozen documents never expire." />
+      <div className="fx-usage"><div className="top"><b>How it works</b></div>
+        <ul style={{ margin: 0, paddingLeft: 18, lineHeight: 1.6, fontSize: 13 }}>
+          <li><b>Frozen</b>: for documents that were valid in the past and must stay available. Status Frozen, version 999.999.999, “do not expire” for good.</li>
+          <li>The previous version goes to the archive history, the document is published again and an e-mail popup lets you inform everybody.</li>
+          <li>A frozen document cannot be changed. <b>Defrozen</b> brings it back to Edit with the last real version + 1.</li>
+          <li>Several documents: select them in the list (Ctrl/Shift), right-click and choose Frozen or Defrozen.</li></ul></div>
+      <div><button className="btn-primary" style={{ width: 'auto' }} onClick={save} disabled={busy || !dirty}>{busy ? <Spinner /> : 'Save'}</button></div>
+    </div>
+  );
 }

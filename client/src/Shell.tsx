@@ -7,6 +7,7 @@ import { TopProgress } from './components/Loader';
 import ChatBot from './components/ChatBot';
 import NotificationBell from './components/NotificationBell';
 import ThemeSwitch from './components/ThemeSwitch';
+import SkinSwitch from './components/SkinSwitch';
 import UserAvatar, { AvatarEditor } from './components/UserAvatar';
 import { IconChart, IconDash, IconDocs, IconFilter, IconGear, IconType, IconUsers, IconMail, IconLogout, IconSearch, IconStd, IconDep, IconFlow, IconTask, IconCatch, IconTag, IconSliders, IconSpark } from './components/Icons';
 
@@ -89,6 +90,7 @@ export default function Shell() {
                 {languages.map(l => <option key={l.lang} value={l.lang}>{l.name ? `${l.name} (${l.lang})` : l.lang}</option>)}
               </select>
             </label>
+            <SkinSwitch />
             <ThemeSwitch />
             <NotificationBell lang={lang} />
             <div className="profile" ref={menuRef}>

@@ -31,7 +31,7 @@ public class GroupOwnerRow { public int Id { get; set; } public int Parent { get
 /// Creates a new document (legacy LDSClientSession.createDocument): rows in Documents for every active language,
 /// the link in DocGrp, the file in <DocPath>\<LANG><DBId>\D<id><ext>, plus a Mods history line.
 [ApiController, Route("api/lds"), Authorize]
-public class UploadController(IConfiguration cfg, IMemoryCache cache, ILogger<UploadController> log) : ControllerBase
+public class UploadController(IConfiguration cfg, IMemoryCache cache, ILogger<UploadController> log, DocIndexWorker indexer) : ControllerBase
 {
     const long MaxBytes = 100L * 1024 * 1024;
     const int RightNewDoc = 34;
@@ -158,6 +158,7 @@ public class UploadController(IConfiguration cfg, IMemoryCache cache, ILogger<Up
             GroupCache.Bump();   // every cached tree level is rebuilt (document counts changed)
             foreach (var l in active) cache.Remove($"stats:{acc}:{l}");
             log.LogInformation("Uploaded document {Id} '{Name}' to {Files}", id, name, string.Join("; ", written));
+            indexer.Request(false);   // index the new file right away
             return Ok(new
             {
                 idDoc = id, lang = std, languages = withFile, name, version = $"{v1}.{v2}.{v3}",

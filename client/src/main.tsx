@@ -24,6 +24,7 @@ const AssistantPage = lazy(() => import('./AssistantPage'));
 const ProgramOptions = lazy(() => import('./ProgramOptions'));
 import './theme.css';
 import './theme';
+import './skin';
 import { LangProvider } from './LangContext';
 
 // Keep data for 5 minutes and do not refetch on window focus: the dashboard queries are heavy.

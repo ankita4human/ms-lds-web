@@ -218,3 +218,31 @@ export function DeleteDialog({ doc, lang, onClose, onDone }: {
       }} />
   );
 }
+
+/** Block / Unblock (manual p. 94-96, 127): a reason is entered (spaces skip it); blocked documents are not usable in MS LDS and the web. */
+export function BlockDialog({ doc, lang, onClose, onDone }: {
+  doc: DocRow; lang: string; onClose: () => void; onDone: (msg: string, ok: boolean) => void;
+}) {
+  const qc = useQueryClient();
+  const unblock = doc.status === 9;
+  const [reason, setReason] = useState(''); const [busy, setBusy] = useState(false);
+  async function go() {
+    setBusy(true);
+    try {
+      if (unblock) await api.unblockDoc(doc.idDoc, lang, reason); else await api.blockDoc(doc.idDoc, lang, reason);
+      await refresh(qc);
+      onDone(unblock ? `Document ${doc.idDoc} is unblocked and back in Edit status.` : `Document ${doc.idDoc} is blocked in all languages.`, true);
+    } catch (e) { onDone(errText(e), false); }
+  }
+  return (
+    <Modal title={unblock ? 'Unblock document' : 'Block document'} sub={`#${doc.idDoc} ${doc.docName}`} busy={busy} onClose={onClose}
+      foot={<><button className="btn-ghost" onClick={onClose} disabled={busy}>Cancel</button>
+        <button className={unblock ? 'btn-primary' : 'btn-primary danger'} style={{ width: 'auto' }} onClick={go} disabled={busy}>{busy ? <Spinner /> : unblock ? '🔓 Unblock' : '⛔ Block'}</button></>}>
+      <div style={{ padding: '4px 18px 14px', display: 'grid', gap: 8 }}>
+        <div className="mh">{unblock ? 'The document goes back to Edit status in all languages and must be released again.' : 'Blocked documents cannot be used in MS LDS or on the web: users see “Document is blocked. Please contact Administrator.” The block applies to all languages.'}</div>
+        <label className="fm-row" style={{ display: 'grid', gap: 4 }}>{unblock ? 'Comment (optional)' : 'Reason to block'}
+          <textarea rows={3} maxLength={450} value={reason} autoFocus onChange={e => setReason(e.target.value)} placeholder="Why is this document blocked?" /></label>
+      </div>
+    </Modal>
+  );
+}

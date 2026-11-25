@@ -29,10 +29,25 @@ public class SearchController(IConfiguration cfg, DocTextIndex index, DocIndexWo
         var rows = (await con.QueryAsync<SearchDocRow>($@"SELECT d.IDDoc, d.Lang, d.DocName, d.Extension, ISNULL(d.[Status], 0) AS [Status], d.V1, d.V2, d.V3,
                 ISNULL((SELECT TOP 1 StatusDesc FROM [Status] s WHERE s.IDStatus = d.[Status] AND s.Lang = d.Lang), '') AS StatusName
             FROM Documents d WHERE d.Lang = @lang AND d.IDDoc IN ({string.Join(",", ids)}) AND {vis}", new { lang })).ToDictionary(r => r.IDDoc);
+        // Folder location(s) of each hit, only groups this user may see
+        var all = await Access.Groups(con, lang);
+        var accessible = Access.AccessibleGroups(all, await Access.Rights(con, Acc));
+        var byG = all.ToDictionary(g => g.IDGroup);
+        var links = (await con.QueryAsync<(int IdDoc, int? IdGroup)>($"SELECT IdDoc, IdGroup FROM DocGrp WHERE IdDoc IN ({string.Join(",", ids)})")).ToList();
+        string? FolderOf(int idDoc)
+        {
+            foreach (var l in links.Where(x => x.IdDoc == idDoc && x.IdGroup is int g0 && byG.ContainsKey(g0) && (accessible is null || accessible.Contains(g0))))
+            {
+                var parts = new List<string>(); var cur = l.IdGroup!.Value; var guard = 0;
+                while (byG.TryGetValue(cur, out var g) && guard++ < 50) { parts.Insert(0, g.GroupDesc ?? $"Group {g.IDGroup}"); cur = g.IDParent; }
+                return string.Join(" / ", parts);
+            }
+            return null;
+        }
         var items = hits.Where(h => rows.ContainsKey(h.IdDoc)).Take(limit).Select(h =>
         {
             var r = rows[h.IdDoc];
-            return new { idDoc = r.IDDoc, lang = r.Lang, docName = r.DocName ?? "", ext = (r.Extension ?? "").TrimStart('.').ToLowerInvariant(), status = r.Status, statusName = r.StatusName ?? "", version = $"{r.V1 ?? 0}.{r.V2 ?? 0}.{r.V3 ?? 0}", snippet = h.Snippet, score = Math.Round(h.Score, 2) };
+            return new { idDoc = r.IDDoc, lang = r.Lang, docName = r.DocName ?? "", ext = (r.Extension ?? "").TrimStart('.').ToLowerInvariant(), status = r.Status, statusName = r.StatusName ?? "", version = $"{r.V1 ?? 0}.{r.V2 ?? 0}.{r.V3 ?? 0}", folder = FolderOf(r.IDDoc), snippet = h.Snippet, score = Math.Round(h.Score, 2) };
         }).ToList();
         return Ok(new { items, indexed = index.Status.Documents, running = index.Status.Running });
     }

@@ -17,8 +17,8 @@ import ChangeVersionDialog from './components/ChangeVersionDialog';
 import EditDialog from './components/EditDialog';
 import WorkflowDialog, { type FlowKind } from './components/WorkflowDialog';
 import BulkFlowDialog, { planFor, type BulkKind } from './components/BulkFlowDialog';
-import { CopyDialog, AssignDialog, RenameDialog, DeleteDialog } from './components/DocDialogs';
-import { FreezeDialog, DefreezeDialog, ExpiryDialog, StandardLinkDialog, DependentsDialog } from './components/StatusDialogs';
+import { CopyDialog, AssignDialog, RenameDialog, DeleteDialog, BlockDialog } from './components/DocDialogs';
+import { BulkFrozenDialog, FreezeDialog, DefreezeDialog, ExpiryDialog, StandardLinkDialog, DependentsDialog } from './components/StatusDialogs';
 import WorkflowRunDialog, { RemoveFromWorkflowDialog } from './components/WorkflowRunDialog';
 import Toast, { type ToastMsg } from './components/Toast';
 
@@ -44,7 +44,7 @@ const MENU: { key: string; label: string; icon: string; right?: number; sepBefor
   { key: 'wfremove', label: 'Remove from workflow', icon: '🚫', right: 40 },
   { key: 'preview', label: 'Web preview', icon: '🌐', live: false },
   { key: 'noweb', label: "Don't view in web", icon: '🙈', right: 38 },
-  { key: 'block', label: 'Block', icon: '⛔', right: 38 },
+  { key: 'block', label: 'Block', icon: '⛔', right: 37 },
   { key: 'expiry', label: 'Expiry / Do not expire', icon: '⏳', right: 37, sepBefore: true },
   { key: 'freeze', label: 'Frozen', icon: '❄️', right: 37 },
   { key: 'defreeze', label: 'Defrozen', icon: '🔥', right: 37 },
@@ -57,7 +57,7 @@ export default function Documents() {
   const nav = useNavigate();
   const [uploadOpen, setUploadOpen] = useState(false);
   const [verDoc, setVerDoc] = useState<DocRow | null>(null);
-  const [docAct, setDocAct] = useState<{ kind: 'copy' | 'assign' | 'rename' | 'delete' | 'stdlink' | 'expiry' | 'freeze' | 'defreeze' | 'workflow' | 'wfremove'; doc: DocRow } | null>(null);
+  const [docAct, setDocAct] = useState<{ kind: 'copy' | 'assign' | 'rename' | 'delete' | 'block' | 'stdlink' | 'expiry' | 'freeze' | 'defreeze' | 'workflow' | 'wfremove'; doc: DocRow } | null>(null);
   const [stdGate, setStdGate] = useState<{ doc: DocRow; then?: { kind: FlowKind; doc: DocRow } } | null>(null);   // link to mandatory standards first
   const [deps, setDeps] = useState<{ idDoc: number; docName: string } | null>(null);
   const stdOpt = useQuery({ queryKey: ['std-options'], queryFn: api.standardOptions, staleTime: 5 * 60_000 });
@@ -70,6 +70,7 @@ export default function Documents() {
   // multi-select (Ctrl/Shift+click or the check boxes) for bulk verify / release / publish
   const [checked, setChecked] = useState<Map<number, DocRow>>(new Map());
   const [bulk, setBulk] = useState<BulkKind | null>(null);
+  const [bulkFrz, setBulkFrz] = useState<'freeze' | 'defreeze' | null>(null);
   const lastClick = useRef<number | null>(null);
   const qc = useQueryClient();
   const [params] = useSearchParams();
@@ -156,6 +157,8 @@ export default function Documents() {
   const stateOk = (key: string, d?: DocRow) => {
     if (!d) return true;
     if (key === 'wfremove') return !!d.isCycle;
+    if (key === 'block') return d.status === 9 || (!d.isCycle && d.status !== 11);   // a document in a workflow cannot be blocked (manual p. 127)
+    if (d.status === 9 && key !== 'block' && key !== 'noweb' && key !== 'view' && key !== 'print' && key !== 'weblink' && key !== 'copy' && key !== 'assign' && key !== 'delete' && key !== 'new' && key !== 'expiry') return false;   // Blocked: only unblock and admin actions
     if (d.status === 11) return key === 'defreeze' || !FROZEN_OFF.includes(key);   // Frozen: no change except Defrozen (manual p. 163)
     if (key === 'defreeze') return false;
     if (key === 'freeze') return d.status === 3 || d.status === 6 || d.status === 8;
@@ -163,7 +166,7 @@ export default function Documents() {
   };
   const stateMsg: Record<string, string> = { verify: 'Only documents in Draft or Edit status can be verified.', release: 'Only verified documents can be released. Verify the document first.',
     relpub: 'Only verified documents can be released and published. Verify the document first.', publish: 'Only released documents can be published. Release the document first.' };
-  const items: MenuItem[] = MENU.filter(m => (frozenOpt.data?.enabled !== false || (m.key !== 'freeze' && m.key !== 'defreeze')) && (stdOpt.data?.enabled || m.key !== 'stdlink') && (wfCfg.data?.enabled !== false || (m.key !== 'workflow' && m.key !== 'wfremove'))).map(m => ({ key: m.key, label: m.label, icon: m.icon, sepBefore: m.sepBefore, enabled: (m.live === true || (m.live !== false && hasRight(m.right))) && stateOk(m.key, menu?.doc) }));
+  const items: MenuItem[] = MENU.filter(m => (frozenOpt.data?.enabled !== false || (m.key !== 'freeze' && m.key !== 'defreeze')) && (stdOpt.data?.enabled || m.key !== 'stdlink') && (wfCfg.data?.enabled !== false || (m.key !== 'workflow' && m.key !== 'wfremove'))).map(m => ({ key: m.key, label: m.key === 'noweb' && menu?.doc?.doNotPublish ? 'View in web' : m.key === 'block' && menu?.doc?.status === 9 ? 'Unblock' : m.label, icon: m.key === 'noweb' && menu?.doc?.doNotPublish ? '👁' : m.key === 'block' && menu?.doc?.status === 9 ? '🔓' : m.icon, sepBefore: m.sepBefore, enabled: (m.live === true || (m.live !== false && hasRight(m.right))) && stateOk(m.key, menu?.doc) }));
 
   // ---- bulk selection ----
   const toggleOne = (d: DocRow) => setChecked(c => { const n = new Map(c); if (n.has(d.idDoc)) n.delete(d.idDoc); else n.set(d.idDoc, d); return n; });
@@ -184,6 +187,31 @@ export default function Documents() {
     { key: 'verify', label: 'Verify', icon: '✅' }, { key: 'release', label: 'Release', icon: '🚀' },
     { key: 'publish', label: 'Publish', icon: '📣' }, { key: 'all', label: 'Verify → Release → Publish', icon: '⚡' }];
   const bulkItems: MenuItem[] = BULK.map((b, i) => ({ key: 'bulk-' + b.key, label: `${b.label} (${eligible(b.key)} of ${picked.length})`, icon: b.icon, sepBefore: i === 3, enabled: eligible(b.key) > 0 }));
+  const nFrz = picked.filter(d => d.status === 3 || d.status === 6 || d.status === 8).length, nDef = picked.filter(d => d.status === 11).length;
+  if (frozenOpt.data?.enabled && (hasRight(37))) bulkItems.push({ key: 'bulk-freeze', label: `Frozen (${nFrz} of ${picked.length})`, icon: '❄️', sepBefore: true, enabled: nFrz > 0 }, { key: 'bulk-defreeze', label: `Defrozen (${nDef} of ${picked.length})`, icon: '🔥', enabled: nDef > 0 });
+
+  // ---- resizable folder panel and table columns (kept per browser) ----
+  const COLS: { k: string; w: number }[] = [{ k: 'sel', w: 38 }, { k: 'id', w: 70 }, { k: 'name', w: 280 }, { k: 'status', w: 120 }, { k: 'type', w: 150 }, { k: 'ver', w: 90 }, { k: 'app', w: 70 },
+    { k: 'lang', w: 90 }, { k: 'created', w: 110 }, { k: 'creator', w: 110 }, { k: 'pub', w: 110 }, { k: 'publisher', w: 110 }, { k: 'rel', w: 110 }, { k: 'exp', w: 110 }];
+  const lsGet = <T,>(key: string, dflt: T): T => { try { const v = localStorage.getItem(key); return v ? (JSON.parse(v) as T) : dflt; } catch { return dflt; } };
+  const lsSet = (key: string, v: unknown) => { try { localStorage.setItem(key, JSON.stringify(v)); } catch { /* storage blocked */ } };
+  const [sideW, setSideW] = useState<number>(() => lsGet('pl_side_w', 320));
+  const [colW, setColW] = useState<Record<string, number>>(() => lsGet('pl_doc_cols', {}));
+  const wOf = (k: string) => colW[k] ?? COLS.find(c => c.k === k)!.w;
+  const tableW = COLS.reduce((a, c) => a + wOf(c.k), 0);
+  function drag(e: React.MouseEvent, start: number, min: number, max: number, apply: (w: number) => void, done: (w: number) => void) {
+    e.preventDefault(); e.stopPropagation();
+    const x0 = e.clientX; let w = start;
+    document.body.classList.add('resizing');
+    const mv = (ev: MouseEvent) => { w = Math.max(min, Math.min(max, start + ev.clientX - x0)); apply(w); };
+    const up = () => { document.body.classList.remove('resizing'); window.removeEventListener('mousemove', mv); window.removeEventListener('mouseup', up); done(w); };
+    window.addEventListener('mousemove', mv); window.addEventListener('mouseup', up);
+  }
+  const startSide = (e: React.MouseEvent) => drag(e, sideW, 160, 680, setSideW, w => lsSet('pl_side_w', w));
+  const nudgeSide = (d: number) => setSideW(w => { const n = Math.max(160, Math.min(680, w + d)); lsSet('pl_side_w', n); return n; });
+  const startCol = (e: React.MouseEvent, k: string) => drag(e, wOf(k), 44, 700, w => setColW(c => ({ ...c, [k]: w })), w => setColW(c => { const n = { ...c, [k]: w }; lsSet('pl_doc_cols', n); return n; }));
+  const resetCol = (k: string) => setColW(c => { const n = { ...c }; delete n[k]; lsSet('pl_doc_cols', n); return n; });
+  const grip = (k: string) => <span className="col-grip" role="separator" aria-orientation="vertical" title="Drag to resize, double-click to reset" onMouseDown={e => startCol(e, k)} onClick={e => e.stopPropagation()} onDoubleClick={e => { e.stopPropagation(); resetCol(k); }} />;
 
   const flash = (m: string) => { setToast(m); setTimeout(() => setToast(''), 2800); };
 
@@ -235,6 +263,7 @@ export default function Documents() {
   }
 
   function pick(key: string, doc: DocRow) {
+    if (key === 'bulk-freeze' || key === 'bulk-defreeze') { setBulkFrz(key === 'bulk-freeze' ? 'freeze' : 'defreeze'); return; }
     if (key.startsWith('bulk-')) { setBulk(key.slice(5) as BulkKind); return; }
     if (key === 'view') setCurrent(doc);
     else if (key === 'new') setUploadOpen(true);
@@ -257,16 +286,19 @@ export default function Documents() {
       const link = `${location.origin}/documents?doc=${doc.idDoc}`;
       navigator.clipboard?.writeText(link).then(() => flash('Weblink copied'), () => flash(link));
     } else if (key === 'print') { setCurrent(doc); setTimeout(() => window.print(), 300); }
+    else if (key === 'noweb') {
+      api.noWebDoc(doc.idDoc, lang, !doc.doNotPublish).then(r => { flash(r.hidden ? 'The document is no longer shown on the web.' : 'The document is shown on the web again.'); void list.refetch(); }, e => setMsg({ ok: false, t: (e as Error).message }));
+    }
     else if (key === 'copy' || key === 'assign' || key === 'rename' || key === 'delete' || key === 'stdlink' || key === 'expiry' || key === 'freeze' || key === 'defreeze' || key === 'workflow' || key === 'wfremove') setDocAct({ kind: key, doc });
     else flash('This action is not available.');
   }
-  const head = (label: string, key: string) => (
-    <th onClick={() => { setDesc(sort === key ? !desc : false); setSort(key); }}>{label}{sort === key ? (desc ? ' ▾' : ' ▴') : ''}</th>);
+  const head = (label: string, key: string, ck: string) => (
+    <th onClick={() => { setDesc(sort === key ? !desc : false); setSort(key); }}>{label}{sort === key ? (desc ? ' ▾' : ' ▴') : ''}{grip(ck)}</th>);
   const nodeName = fid ? `Filter: ${filters.data?.find(f => f.idFilter === fid)?.name ?? fid}` : sel === 'none' ? 'Select a folder' : sel === 'all' ? 'All documents' : sel === 'expired' ? 'Expired documents'
     : tree.data?.groups.find(g => g.idGroup === sel)?.name ?? '';
 
   return (
-    <div className="docs">
+    <div className="docs" style={{ ['--side-w' as string]: `${sideW}px` }}>
       <div className="docs-side">
         <GroupTreeView groups={tree.data?.groups ?? []} total={tree.data?.total ?? 0} expired={tree.data?.expired ?? 0}
           sel={fid ? -1 : sel} onSel={(s, all) => { setFid(null); setSubs(!!all); setSel(s); }} rootLabel={`${lang} Document structure`} countsLoading={tree.countsLoading} reveal={reveal}
@@ -295,6 +327,8 @@ export default function Documents() {
           {mailLists.data?.items.length === 0 && <div className="mh" style={{ padding: '4px 10px' }}>No lists yet.</div>}
         </div>
       </div>
+      <div className="side-grip" role="separator" aria-orientation="vertical" tabIndex={0} title="Drag to resize the folder panel, double-click to reset" onMouseDown={startSide}
+        onDoubleClick={() => { setSideW(320); lsSet('pl_side_w', 320); }} onKeyDown={e => { if (e.key === 'ArrowLeft') nudgeSide(-24); if (e.key === 'ArrowRight') nudgeSide(24); }}><i /></div>
       <div style={{ minWidth: 0 }}>
         <div className="toolbar">
           <div className="crumb">{nodeName}<small>{list.data?.total ?? 0} documents</small></div>
@@ -315,9 +349,10 @@ export default function Documents() {
         )}
         <div className="card table-wrap" style={{ padding: 0 }}>
           {list.isFetching && !list.isLoading && <div className="fetch-veil"><PageLoader compact label="Loading documents" /></div>}
-          <table className="grid-table">
-            <thead><tr><th className="sel-col"><input type="checkbox" checked={allOnPage} onChange={togglePage} aria-label="Select all documents on this page" title="Select all on this page" /></th>{head('ID', 'id')}{head('Document', 'name')}{head('Status', 'status')}{head('Type', 'type')}<th>Version</th><th>App</th>
-              <th>Std. lang</th>{head('Created', 'created')}{head('Creator', 'creator')}{head('Published', 'published')}<th>Publisher</th>{head('Released', 'released')}{head('Expires', 'expires')}</tr></thead>
+          <table className="grid-table docs-table" style={{ width: Math.max(tableW, 0), minWidth: '100%' }}>
+            <colgroup>{COLS.map(c => <col key={c.k} style={{ width: wOf(c.k) }} />)}</colgroup>
+            <thead><tr><th className="sel-col"><input type="checkbox" checked={allOnPage} onChange={togglePage} aria-label="Select all documents on this page" title="Select all on this page" /></th>{head('ID', 'id', 'id')}{head('Document', 'name', 'name')}{head('Status', 'status', 'status')}{head('Type', 'type', 'type')}<th>Version{grip('ver')}</th><th>App{grip('app')}</th>
+              <th>Std. lang{grip('lang')}</th>{head('Created', 'created', 'created')}{head('Creator', 'creator', 'creator')}{head('Published', 'published', 'pub')}<th>Publisher{grip('publisher')}</th>{head('Released', 'released', 'rel')}{head('Expires', 'expires', 'exp')}</tr></thead>
             <tbody>
               {(list.isLoading || !lang) && <SkeletonRows rows={10} cols={14} />}
               {sel === 'none' && !fid && !dText && <tr><td colSpan={14} style={{ textAlign: 'center', padding: '48px 16px', color: 'var(--muted)' }}>📁 Click a folder in the structure on the left to show its documents and sub-groups.<br /><small>Right-click a folder and choose “View all documents” to include its sub-groups.</small></td></tr>}
@@ -362,7 +397,8 @@ export default function Documents() {
         items={[{ key: 'manage', label: 'Filter Management', icon: '🧰', enabled: true }, { key: 'print', label: 'Print Report', icon: '🖨️', enabled: true }, { key: 'csv', label: 'Export CSV', icon: '📤', enabled: true }]} />}
       {dmenu && <ContextMenu x={dmenu.x} y={dmenu.y} onClose={() => setDmenu(null)} onPick={() => nav('/options/distribution')}
         items={[{ key: 'mail', label: 'E-mail Distribution', icon: '✉️', enabled: true }]} />}
-      {menu && <ContextMenu x={menu.x} y={menu.y} items={menu.bulk ? bulkItems : items} onPick={k => pick(k, menu.doc)} onClose={() => setMenu(null)} />}
+      {menu && <ContextMenu x={menu.x} y={menu.y} items={menu.bulk ? bulkItems : items} title={menu.bulk ? `${picked.length} documents selected` : `#${menu.doc.idDoc} ${menu.doc.docName}`} subtitle={menu.bulk ? 'Bulk actions' : `${menu.doc.statusName} · v${menu.doc.v1}.${menu.doc.v2}.${menu.doc.v3}`} onPick={k => pick(k, menu.doc)} onClose={() => setMenu(null)} />}
+      {bulkFrz && <BulkFrozenDialog kind={bulkFrz} docs={picked} lang={lang} onClose={() => setBulkFrz(null)} onFinished={q => { if (q) window.dispatchEvent(new Event('pl-publish-queued')); }} />}
       {bulk && <BulkFlowDialog kind={bulk} docs={picked} lang={lang} can={hasRight} onClose={() => setBulk(null)}
         onFinished={async r => {
           await Promise.all(['docs', 'doc', 'doc-deep', 'stats', 'groups'].map(x => qc.invalidateQueries({ queryKey: [x] })));
@@ -388,6 +424,7 @@ export default function Documents() {
         <CopyDialog doc={docAct.doc} lang={lang} groups={tree.data?.groups ?? []} defaultGroup={typeof sel === 'number' ? sel : null} onClose={() => setDocAct(null)}
           onDone={(id, n) => { setDocAct(null); flash(`Copy created: #${id} ${n}`); nav(`/documents?doc=${id}`); }} />
       )}
+      {docAct?.kind === 'block' && <BlockDialog doc={docAct.doc} lang={lang} onClose={() => setDocAct(null)} onDone={(m, ok) => { setDocAct(null); setMsg({ ok, t: m }); }} />}
       {docAct?.kind === 'stdlink' && <StandardLinkDialog doc={docAct.doc} lang={lang} onClose={() => setDocAct(null)} onDone={m => { setDocAct(null); flash(m); }} />}
       {docAct?.kind === 'expiry' && <ExpiryDialog doc={docAct.doc} lang={lang} onClose={() => setDocAct(null)} onDone={m => { setDocAct(null); flash(m); }} />}
       {docAct?.kind === 'freeze' && <FreezeDialog doc={docAct.doc} lang={lang} onClose={() => setDocAct(null)} onDone={m => { setDocAct(null); setMsg({ ok: true, t: m }); }} />}

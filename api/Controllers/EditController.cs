@@ -59,7 +59,7 @@ public static class DocFiles
 
 /// Edit flow (manual: Edit document): check out -> work on the file -> check in with comment / version.
 [ApiController, Route("api/lds/documents"), Authorize]
-public class EditController(IConfiguration cfg, IMemoryCache cache, ILogger<EditController> log) : ControllerBase
+public class EditController(IConfiguration cfg, IMemoryCache cache, ILogger<EditController> log, DocIndexWorker indexer) : ControllerBase
 {
     const int RightEdit = 38;
     const long MaxBytes = 100L * 1024 * 1024;
@@ -255,6 +255,7 @@ public class EditController(IConfiguration cfg, IMemoryCache cache, ILogger<Edit
             throw;
         }
         cache.Remove($"stats:{Acc}:{lang}");
+        indexer.Request(false);   // index the new version right away
         return Ok(new { idDoc = id, lang, version = $"{n1}.{n2}.{n3}", status = newStatus, languages = targets, archived = versioned });
     }
 }

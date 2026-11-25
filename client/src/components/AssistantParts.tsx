@@ -56,7 +56,9 @@ export function MessageExtras({ m, go, ask, showFollow, busy }: { m: Msg; go: (t
             <button key={`${h.idDoc}${h.lang}`} className="bot-doc hit" onClick={() => go(`/documents?doc=${h.idDoc}`)}>
               <div className="bot-doc-top"><b>#{h.idDoc} · {h.ext ? h.ext.toUpperCase() : 'FILE'} · v{h.version}</b><StatusBadge id={h.status} name={h.statusName} /></div>
               <div className="bot-doc-name">{h.docName}</div>
+              {h.folder && <div className="bot-doc-meta">📁 {h.folder}</div>}
               <div className="bot-snip"><Snip text={h.snippet} /></div>
+              <div className="bot-doc-meta">Click to open the folder and select this document</div>
             </button>
           ))}
         </div>

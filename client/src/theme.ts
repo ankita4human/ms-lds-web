@@ -1,7 +1,7 @@
-export type ThemeMode = 'normal' | 'light' | 'dark';
+export type ThemeMode = 'normal' | 'light' | 'dark' | 'night' | 'navy';
 const KEY = 'pl_theme';
 export const getTheme = (): ThemeMode => {
-  try { const v = localStorage.getItem(KEY); if (v === 'light' || v === 'dark' || v === 'normal') return v; } catch { /* storage blocked */ }
+  try { const v = localStorage.getItem(KEY); if (v === 'light' || v === 'dark' || v === 'night' || v === 'navy' || v === 'normal') return v; } catch { /* storage blocked */ }
   return 'normal';
 };
 export function applyTheme(m: ThemeMode) {

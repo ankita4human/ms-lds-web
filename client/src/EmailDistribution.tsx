@@ -7,6 +7,7 @@ import ConfirmDialog from './components/ConfirmDialog';
 import Toast, { type ToastMsg } from './components/Toast';
 import PageHero from './components/PageHero';
 import { IconMail } from './components/Icons';
+import { SaveBar, useSaveShortcut } from './components/FormBits';
 
 const initials = (n: string) => n.split(/[\s.@]+/).filter(Boolean).slice(0, 2).map(x => x[0]!.toUpperCase()).join('') || '?';
 const avColor = (n: string) => { let h = 0; for (const c of n) h = (h * 31 + c.charCodeAt(0)) % 360; return `linear-gradient(135deg, hsl(${h} 70% 52%), hsl(${(h + 40) % 360} 75% 42%))`; };
@@ -99,93 +100,130 @@ export default function EmailDistribution() {
   const lists = useQuery({ queryKey: ['mail-lists'], queryFn: api.mailLists });
   const [sel, setSel] = useState<number | 'new' | null>(null);
   const detail = useQuery({ queryKey: ['mail-list', sel], queryFn: () => api.mailList(sel as number), enabled: typeof sel === 'number' });
-  const [name, setName] = useState('');
+  const [name, setName] = useState(''); const [base, setBase] = useState('');
+  const [q, setQ] = useState(''); const [mq, setMq] = useState('');
   const [msg, setMsg] = useState<ToastMsg>(null);
   const [busy, setBusy] = useState(false);
   const [dlg, setDlg] = useState<null | 'book' | 'del'>(null);
-  const [rmMember, setRmMember] = useState<MailMember | null>(null);
-  const [selMember, setSelMember] = useState<number | null>(null);
+  const [rmMembers, setRmMembers] = useState<MailMember[] | null>(null);
+  const [checked, setChecked] = useState<number[]>([]);
+  const [pending, setPending] = useState<number | 'new' | null | undefined>(undefined);
 
-  useEffect(() => { if (sel === 'new') setName(''); else if (detail.data) setName(detail.data.name); }, [sel, detail.data?.id, detail.data?.name]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { setSelMember(null); }, [sel]);
+  useEffect(() => {
+    if (sel === 'new') { setName(''); setBase(''); }
+    else if (detail.data) { setName(detail.data.name); setBase(detail.data.name); }
+  }, [sel, detail.data?.id, detail.data?.name]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setChecked([]); setMq(''); }, [sel]);
 
   const run = async (fn: () => Promise<void>) => { setBusy(true); setMsg(null); try { await fn(); } catch (e) { setMsg({ ok: false, t: (e as Error).message }); } finally { setBusy(false); } };
   const refresh = async () => { await Promise.all(['mail-lists', 'mail-list', 'doc-dist'].map(k => qc.invalidateQueries({ queryKey: [k] }))); };
+  const dirty = sel !== null && name !== base;
+  const open = (id: number | 'new' | null) => { if (dirty && id !== sel) setPending(id); else setSel(id); };
 
   const save = () => run(async () => {
-    if (sel === 'new') { const r = await api.createMailList(name); await refresh(); setSel(r.id); setMsg({ ok: true, t: `Distribution list “${name.trim()}” created. Add the recipients with the + button on the right.` }); }
-    else if (typeof sel === 'number') { await api.renameMailList(sel, name); await refresh(); setMsg({ ok: true, t: 'Distribution list renamed.' }); }
+    if (!name.trim()) throw new Error('Please enter a name.');
+    if (sel === 'new') { const r = await api.createMailList(name); await refresh(); setBase(name); setSel(r.id); setMsg({ ok: true, t: `Distribution list “${name.trim()}” created. Add the recipients with the Add button.` }); }
+    else if (typeof sel === 'number') { await api.renameMailList(sel, name); await refresh(); setBase(name); setMsg({ ok: true, t: 'Distribution list renamed.' }); }
   });
-  const remove = () => run(async () => { if (typeof sel !== 'number') return; await api.deleteMailList(sel); await refresh(); setSel(null); setMsg({ ok: true, t: 'Distribution list deleted.' }); });
+  const remove = () => run(async () => { if (typeof sel !== 'number') return; await api.deleteMailList(sel); await refresh(); setBase(''); setSel(null); setMsg({ ok: true, t: 'Distribution list deleted.' }); });
+  useSaveShortcut(() => { if (!busy && dirty && name.trim()) void save(); }, sel !== null);
+
+  const d = detail.data;
+  const u = d?.usage;
+  const usedTotal = (u?.documents ?? 0) + (u?.audits ?? 0) + (u?.matrix ?? 0) + (u?.other ?? 0);
+  const totalMembers = lists.data?.items.reduce((a, b) => a + b.members, 0);
+  const shownLists = useMemo(() => (lists.data?.items ?? []).filter(l => !q.trim() || l.name.toLowerCase().includes(q.trim().toLowerCase())), [lists.data, q]);
+  const members = useMemo(() => (d?.members ?? []).filter(m => !mq.trim() || `${m.name} ${m.email}`.toLowerCase().includes(mq.trim().toLowerCase())), [d, mq]);
+  const toggle = (id: number) => setChecked(c => c.includes(id) ? c.filter(x => x !== id) : [...c, id]);
+  const allChecked = members.length > 0 && members.every(m => checked.includes(m.idec));
+  const copyMails = async () => {
+    const txt = (d?.members ?? []).filter(m => !checked.length || checked.includes(m.idec)).map(m => m.email).join('; ');
+    try { await navigator.clipboard.writeText(txt); setMsg({ ok: true, t: `${txt.split('; ').filter(Boolean).length} e-mail address(es) copied.` }); } catch { setMsg({ ok: false, t: 'Copy is not allowed in this browser.' }); }
+  };
 
   if (lists.error) return <div className="card" style={{ padding: 20 }}><div className="alert" role="alert">{(lists.error as Error).message}</div></div>;
-  const d = detail.data;
-  const totalMembers = lists.data?.items.reduce((a, b) => a + b.members, 0);
-  const u = d?.usage;
 
   return (
     <div className="um">
       <PageHero icon={<IconMail />} title="E-mail distribution" sub="Distribution lists: recipients are informed when a document is released or published"
         chips={[{ n: lists.data?.items.length ?? '–', label: 'lists' }, { n: totalMembers ?? '–', label: 'recipients' }]} />
-      <div className="fm">
-        <div className="card fm-list">
-          <fieldset className="fm-box"><legend>All distributors</legend>
-            <div className="um-head"><span /><span>
-              <button className="ico-btn add" title="Add distribution list" aria-label="Add distribution list" onClick={() => setSel('new')}>＋</button>
-              <button className="ico-btn del" title="Delete distribution list" aria-label="Delete distribution list" disabled={busy || typeof sel !== 'number'} onClick={() => setDlg('del')}>−</button></span></div>
+      <div className="fx">
+        <aside className="card fx-list">
+          <button className="fx-new" onClick={() => open('new')}><span>＋</span> New distribution list</button>
+          <div className="fx-search"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg><input value={q} onChange={e => setQ(e.target.value)} placeholder="Search lists" aria-label="Search lists" /></div>
+          <div className="fx-items">
             {lists.isLoading && <PageLoader compact label="Loading lists" />}
-            <div className="um-list users">
-              {lists.data?.items.map(l => (
-                <div key={l.id} className={`um-item ${sel === l.id ? 'sel' : ''}`} onClick={() => setSel(l.id)}>
-                  <span className="um-av grp"><IconMail /></span>
-                  <span className="um-nm"><b>{l.name}</b><small>{l.members} recipient(s){l.documents ? ` · ${l.documents} document(s)` : ''}</small></span>
-                </div>
-              ))}
-              {lists.data?.items.length === 0 && <div className="mh" style={{ padding: 10 }}>No distribution lists yet. Click ＋ to add one.</div>}
-            </div>
-          </fieldset>
-        </div>
+            {shownLists.map(l => (
+              <button key={l.id} className={`fx-item ${sel === l.id ? 'sel' : ''}`} onClick={() => open(l.id)}>
+                <span className="um-av grp"><IconMail /></span>
+                <span className="tx"><b>{l.name}</b><small>{l.members} recipient{l.members === 1 ? '' : 's'}{l.documents ? ` · ${l.documents} document${l.documents === 1 ? '' : 's'}` : ''}</small></span>
+              </button>))}
+            {lists.data && shownLists.length === 0 && <div className="fx-empty">{lists.data.items.length ? 'No list matches.' : 'No distribution lists yet. Create the first one!'}</div>}
+          </div>
+        </aside>
 
-        <div className="card fm-edit">
-          {sel === null ? <div className="mh" style={{ padding: 20 }}>Select a distribution list on the left or add a new one.</div> : (<>
-            <fieldset className="fm-box"><legend>Distributor</legend>
-              <div className="fm-top">
-                <div className="fm-fields"><label className="fm-row">Name<input value={name} maxLength={50} onChange={e => setName(e.target.value)} onKeyDown={e => e.key === 'Enter' && name.trim() && save()} /></label>
-                  {u && <small className="mh">Used in {u.documents} document(s){u.audits ? `, ${u.audits} audit(s)` : ''}{u.matrix ? `, ${u.matrix} matrix entries` : ''}{u.other ? `, ${u.other} other application(s)` : ''}. A list that is still used cannot be deleted.</small>}</div>
-                <div className="fm-btns"><button className="btn-primary" onClick={save} disabled={busy || !name.trim()}>{busy ? <Spinner /> : 'Save'}</button></div>
+        <section className="card fx-edit">
+          {sel === null ? (
+            <div className="fx-hero"><div className="big">📬</div><h3>Select a distribution list or create one</h3>
+              <p>People on a list get an e-mail when a document is released or published.</p>
+              <button className="btn-primary" onClick={() => open('new')}>＋ New distribution list</button></div>
+          ) : (<>
+            <div className="fx-head">
+              <div className="fx-namebox">
+                <input value={name} maxLength={50} placeholder="List name, e.g. Quality team" aria-label="Distribution list name" autoFocus={sel === 'new'} onChange={e => setName(e.target.value)} onKeyDown={e => e.key === 'Enter' && name.trim() && dirty && void save()} />
+                {d && <div className="fx-count"><b>{d.members.length}</b><span>recipient{d.members.length === 1 ? '' : 's'}</span></div>}
               </div>
-            </fieldset>
-            {typeof sel === 'number' && d && (
-              <fieldset className="fm-box"><legend>Distributor users</legend>
-                <div className="um-head"><span className="mh">{d.members.length} recipient(s)</span><span>
-                  <button className="ico-btn add" title="Add users from the address book" aria-label="Add users" disabled={busy} onClick={() => setDlg('book')}>＋</button>
-                  <button className="ico-btn del" title="Remove user from the list" aria-label="Remove user" disabled={busy || selMember === null}
-                    onClick={() => { const m = d.members.find(x => x.idec === selMember); if (m) setRmMember(m); }}>−</button></span></div>
-                <div className="um-list tall" style={{ maxHeight: 380 }}>
-                  {d.members.map(m => (
-                    <div key={m.idec} className={`um-item ${selMember === m.idec ? 'sel' : ''}`} onClick={() => setSelMember(m.idec)}>
-                      <span className="um-av" style={{ background: avColor(m.name) }}>{initials(m.name)}</span>
-                      <span className="um-nm"><b>{m.name}</b><small>{m.email}</small></span>
-                      {m.isAccount && <em className="ab-tag">User</em>}
-                    </div>
-                  ))}
-                  {d.members.length === 0 && <div className="mh" style={{ padding: 10 }}>No recipients yet. Click ＋ to open the address book.</div>}
-                </div>
-              </fieldset>
-            )}
-            {sel === 'new' && <small className="mh">Enter a name and click Save. Then add the recipients.</small>}
-          </>)}
-        </div>
-      </div>
+              {u && <div className="fx-usagechips">
+                <span title="Documents using this list">📄 {u.documents} document{u.documents === 1 ? '' : 's'}</span>
+                {u.audits > 0 && <span>🔎 {u.audits} audit{u.audits === 1 ? '' : 's'}</span>}
+                {u.matrix > 0 && <span>🧮 {u.matrix} matrix entries</span>}
+                {u.other > 0 && <span>🧩 {u.other} other</span>}
+                {usedTotal > 0 && <span className="warn">In use: cannot be deleted</span>}</div>}
+            </div>
 
-      <div className="um-status"><span className="um-count"><b>{lists.data?.items.length ?? '–'}</b> distribution lists</span><button className="um-ok" onClick={() => nav('/documents')}>OK</button></div>
+            <div className="fx-pane">
+              {typeof sel === 'number' && d ? (
+                <div className="fx-panel wide">
+                  <div className="fx-panel-head"><b><span>👥</span>Recipients<em>{d.members.length}</em></b>
+                    <span className="fx-bulk">
+                      {checked.length > 0 && <button className="btn-ghost danger" disabled={busy} onClick={() => setRmMembers(d.members.filter(m => checked.includes(m.idec)))}>Remove {checked.length}</button>}
+                      <button className="btn-ghost" disabled={d.members.length === 0} onClick={() => void copyMails()}>{checked.length ? `Copy ${checked.length} e-mail(s)` : 'Copy all e-mails'}</button>
+                      <button className="fx-add" disabled={busy} onClick={() => setDlg('book')}>＋ Add from address book</button></span></div>
+                  {d.members.length > 5 && <div className="fx-selrow">
+                    <label className="fx-all"><input type="checkbox" checked={allChecked} onChange={() => setChecked(allChecked ? checked.filter(id => !members.some(m => m.idec === id)) : [...new Set([...checked, ...members.map(m => m.idec)])])} />Select all{mq ? ' shown' : ''}</label>
+                    <input className="fx-mini" placeholder="Find a recipient…" value={mq} onChange={e => setMq(e.target.value)} /></div>}
+                  <div className="fx-rows tall">
+                    {members.map(m => (
+                      <label key={m.idec} className={`fx-row sel-able ${checked.includes(m.idec) ? 'on' : ''}`}>
+                        <input type="checkbox" checked={checked.includes(m.idec)} onChange={() => toggle(m.idec)} />
+                        <span className="um-av" style={{ background: avColor(m.name) }}>{initials(m.name)}</span>
+                        <span className="nm"><b>{m.name}</b><small>{m.email}</small></span>
+                        {m.isAccount && <em className="ab-tag">User</em>}
+                        <button type="button" aria-label={`Remove ${m.name}`} title="Remove from list" disabled={busy} onClick={e => { e.preventDefault(); setRmMembers([m]); }}>×</button>
+                      </label>))}
+                    {d.members.length === 0 && <div className="fx-empty">No recipients yet. Click “Add from address book”.</div>}
+                    {d.members.length > 0 && members.length === 0 && <div className="fx-empty">Nobody matches.</div>}
+                  </div>
+                </div>
+              ) : sel === 'new' ? <div className="fx-hint">Enter a name and click Save. Then add the recipients.</div> : <PageLoader compact label="Loading list" />}
+            </div>
+
+            <SaveBar dirty={dirty} busy={busy} canSave={!!name.trim()} onSave={() => void save()} onReset={() => setName(base)}>
+              {typeof sel === 'number' && <button className="btn-ghost danger" disabled={busy || usedTotal > 0} title={usedTotal > 0 ? 'This list is still in use' : 'Delete list'} onClick={() => setDlg('del')}>Delete</button>}
+              <button className="btn-ghost" onClick={() => nav('/documents')}>Close</button>
+            </SaveBar>
+          </>)}
+        </section>
+      </div>
       <Toast msg={msg} onClose={() => setMsg(null)} />
 
+      {pending !== undefined && <ConfirmDialog title="Discard your changes?" confirmLabel="Discard" busy={false}
+        message={<>You changed the list name and did not save it.</>} onConfirm={() => { setSel(pending); setPending(undefined); }} onCancel={() => setPending(undefined)} />}
       {dlg === 'book' && typeof sel === 'number' && d && <AddressBook exclude={d.members.map(m => m.idec)} busy={busy} onMsg={setMsg} onCancel={() => setDlg(null)}
         onAdd={ids => run(async () => { const r = await api.addMailMembers(sel, ids); await refresh(); setDlg(null); setMsg({ ok: true, t: `${r.added} recipient(s) added to “${d.name}”.` }); })} />}
-      {rmMember && typeof sel === 'number' && <ConfirmDialog danger title="Remove recipient?" confirmLabel="Remove" busy={busy}
-        message={<><b>{rmMember.name}</b> ({rmMember.email}) will be removed from this distribution list. The address stays in the address book.</>}
-        onConfirm={async () => { await run(async () => { await api.removeMailMember(sel, rmMember.idec); setSelMember(null); await refresh(); setMsg({ ok: true, t: 'Recipient removed from the list.' }); }); setRmMember(null); }} onCancel={() => setRmMember(null)} />}
+      {rmMembers && typeof sel === 'number' && <ConfirmDialog danger title={rmMembers.length > 1 ? 'Remove recipients?' : 'Remove recipient?'} confirmLabel="Remove" busy={busy}
+        message={rmMembers.length === 1 ? <><b>{rmMembers[0]!.name}</b> ({rmMembers[0]!.email}) will be removed from this distribution list. The address stays in the address book.</> : <><b>{rmMembers.length} recipients</b> will be removed from this distribution list. Their addresses stay in the address book.</>}
+        onConfirm={async () => { await run(async () => { for (const m of rmMembers) await api.removeMailMember(sel, m.idec); setChecked([]); await refresh(); setMsg({ ok: true, t: rmMembers.length > 1 ? `${rmMembers.length} recipients removed from the list.` : 'Recipient removed from the list.' }); }); setRmMembers(null); }} onCancel={() => setRmMembers(null)} />}
       {dlg === 'del' && typeof sel === 'number' && <ConfirmDialog danger title="Delete distribution list?" confirmLabel="Delete" busy={busy}
         message={<>The distribution list <b>{name}</b> and its recipient assignments will be deleted. The addresses stay in the address book.</>}
         onConfirm={async () => { await remove(); setDlg(null); }} onCancel={() => setDlg(null)} />}

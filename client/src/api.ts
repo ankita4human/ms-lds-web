@@ -24,7 +24,7 @@ export type DocRow = {
   idDoc: number; docName: string; lang: string; langStandard?: string;
   status: number; statusName: string; type: number; typeName: string;
   v1: number; v2: number; v3: number; extension?: string;
-  dateCre?: string; dateMod?: string; dateExp?: string; datePub?: string; dateRel?: string; doNotExpire?: boolean; isCycle?: boolean;
+  dateCre?: string; dateMod?: string; dateExp?: string; datePub?: string; dateRel?: string; doNotExpire?: boolean; isCycle?: boolean; doNotPublish?: boolean;
   creator?: string; publisher?: string; releaser?: string; paths?: string[];
 };
 export type DocPage = { total: number; page: number; pageSize: number; items: DocRow[] };
@@ -163,7 +163,7 @@ export type WfRun = { run: number; current: boolean; workflow: string; data: { r
 export type WfTaskItem = { taskId: number; idDoc: number; lang: string; docName: string; ext?: string; status: number; statusName: string; version: string; workflow: string; step: string;
   layer: number; layerName: string; startedBy: string; assigned?: string; due?: string; overdue: boolean; remark: string };
 export type WfTaskNote = { taskId: number; idDoc: number; lang: string; docName: string; workflow: string; step: string; layer: number; layerName: string; startedBy: string; assigned?: string; due?: string; overdue: boolean };
-export type ContentItem = { idDoc: number; lang: string; docName: string; ext: string; status: number; statusName: string; version: string; snippet: string; score: number };
+export type ContentItem = { idDoc: number; lang: string; docName: string; ext: string; status: number; statusName: string; version: string; folder?: string | null; snippet: string; score: number };
 export type ContentSearch = { items: ContentItem[]; indexed: number; running: boolean };
 export type IndexStatus = { documents: number; pending: number; running: boolean; lastStart?: string; lastEnd?: string; indexed: number; skipped: number; failed: number; note?: string };
 export type WfSummary = { enabled: boolean; total: number; overdue: number; counts: number[]; items: WfTaskNote[] };
@@ -257,6 +257,7 @@ export const api = {
   dependents: (id: number, lang: string) => req<{ choose: boolean; items: DependentItem[] }>(`/api/lds/documents/${id}/dependents?lang=${encodeURIComponent(lang)}`),
   editDependents: (id: number, lang: string, ids: number[]) => req<{ moved: number; documents: number[] }>(`/api/lds/documents/${id}/dependents/edit`, { method: 'POST', body: JSON.stringify({ lang, ids }) }),
   // ---- Frozen / Defrozen, expiry ----
+  setFrozenOptions: (enabled: boolean, doNotExpire: boolean) => req<{ enabled: boolean; doNotExpire: boolean }>('/api/lds/frozen/options', { method: 'PUT', body: JSON.stringify({ enabled, doNotExpire }) }),
   frozenOptions: () => req<{ enabled: boolean; canManage: boolean; doNotExpire: boolean }>('/api/lds/frozen/options'),
   freezeDoc: (id: number, lang: string, expires?: string | null, mail?: MailPayload) => req<FlowResult & { mailSent?: boolean; mailError?: string | null }>(`/api/lds/documents/${id}/freeze`, { method: 'POST', body: JSON.stringify({ lang, expires, mail }) }),
   defreezeDoc: (id: number, lang: string, expires?: string | null) => req<FlowResult>(`/api/lds/documents/${id}/defreeze`, { method: 'POST', body: JSON.stringify({ lang, expires }) }),
@@ -365,6 +366,9 @@ export const api = {
   addAssignment: (id: number, lang: string, groupId: number) => req<{ added: boolean }>(`/api/lds/documents/${id}/assignments`, { method: 'POST', body: JSON.stringify({ lang, groupId }) }),
   removeAssignment: (id: number, lang: string, groupId: number) => req<unknown>(`/api/lds/documents/${id}/assignments/${groupId}?lang=${encodeURIComponent(lang)}`, { method: 'DELETE' }),
   renameDoc: (id: number, body: { lang: string; name: string; newName?: string }) => req<{ name: string; republish: boolean }>(`/api/lds/documents/${id}/rename`, { method: 'PUT', body: JSON.stringify(body) }),
+  noWebDoc: (id: number, lang: string, hide: boolean) => req<{ hidden: boolean }>(`/api/lds/documents/${id}/noweb`, { method: 'POST', body: JSON.stringify({ lang, hide }) }),
+  blockDoc: (id: number, lang: string, reason: string) => req<{ status: number }>(`/api/lds/documents/${id}/block`, { method: 'POST', body: JSON.stringify({ lang, reason }) }),
+  unblockDoc: (id: number, lang: string, reason: string) => req<{ status: number }>(`/api/lds/documents/${id}/unblock`, { method: 'POST', body: JSON.stringify({ lang, reason }) }),
   deleteDoc: (id: number, lang: string) => req<{ warnings: string[] }>(`/api/lds/documents/${id}?lang=${encodeURIComponent(lang)}`, { method: 'DELETE' }),
   changeVersion: (id: number, body: { lang: string; v1: number; v2: number; v3: number; comment?: string }) =>
     req<VersionResult>(`/api/lds/documents/${id}/version`, { method: 'POST', body: JSON.stringify(body) }),

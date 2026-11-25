@@ -1,46 +1,58 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { api, type DateRange, type FilterCriteria, type IdName } from './api';
+import { api, type DateRange, type FilterCriteria, type FilterHead, type FilterOptions, type IdName } from './api';
 import { useLang } from './LangContext';
 import { Spinner, PageLoader } from './components/Loader';
 import ConfirmDialog from './components/ConfirmDialog';
 import { IconFilter } from './components/Icons';
 import PageHero from './components/PageHero';
-import Toast from './components/Toast';
+import Toast, { type ToastMsg } from './components/Toast';
+import { Combo, Pills, SaveBar, Switch, useSaveShortcut } from './components/FormBits';
 
 type Tab = 'doc' | 'control' | 'other' | 'date';
-const DATES: { key: 'created' | 'edited' | 'released' | 'published' | 'expired'; label: string }[] = [
-  { key: 'created', label: 'Created date' }, { key: 'edited', label: 'Edit date' }, { key: 'released', label: 'Released date' },
-  { key: 'published', label: 'Published date' }, { key: 'expired', label: 'Expired date' },
+type DKey = 'created' | 'edited' | 'released' | 'published' | 'expired';
+const DATES: { key: DKey; label: string; ico: string }[] = [
+  { key: 'created', label: 'Created date', ico: '🆕' }, { key: 'edited', label: 'Edit date', ico: '✏️' }, { key: 'released', label: 'Released date', ico: '✅' },
+  { key: 'published', label: 'Published date', ico: '🚀' }, { key: 'expired', label: 'Expired date', ico: '⏳' },
 ];
-const today = () => new Date().toISOString().slice(0, 10);
+const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const today = () => ymd(new Date());
 const emptyRange = (): DateRange => ({ active: false, from: today(), to: today() });
+const daysAgo = (n: number) => { const d = new Date(); d.setDate(d.getDate() - n); return ymd(d); };
+const RANGES: { label: string; make: () => { from: string; to: string } }[] = [
+  { label: 'Today', make: () => ({ from: today(), to: today() }) },
+  { label: 'Last 7 days', make: () => ({ from: daysAgo(7), to: today() }) },
+  { label: 'Last 30 days', make: () => ({ from: daysAgo(30), to: today() }) },
+  { label: 'This month', make: () => { const d = new Date(); return { from: ymd(new Date(d.getFullYear(), d.getMonth(), 1)), to: today() }; } },
+  { label: 'This year', make: () => ({ from: `${new Date().getFullYear()}-01-01`, to: today() }) },
+];
+const TAB_ICO: Record<Tab, string> = { doc: '📄', control: '👤', other: '⚙️', date: '📅' };
+const TAB_LBL: Record<Tab, string> = { doc: 'Document', control: 'People', other: 'Other', date: 'Dates' };
 
-function Pick({ label, value, onChange, options }: { label: string; value?: number; onChange: (v?: number) => void; options: IdName[] }) {
-  return (
-    <label className="fm-row">{label}
-      <select value={value ?? ''} onChange={e => onChange(e.target.value ? Number(e.target.value) : undefined)}>
-        <option value="">-</option>{options.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
-      </select>
-    </label>
-  );
+type Chip = { key: string; tab: Tab; text: string; clear: () => void };
+
+function chipsOf(c: FilterCriteria, o: FilterOptions | undefined, set: (p: Partial<FilterCriteria>) => void): Chip[] {
+  const out: Chip[] = [];
+  const nm = (a: IdName[] | undefined, id?: number) => a?.find(x => x.id === id)?.name ?? String(id);
+  const names = (a: IdName[] | undefined, ids: number[]) => ids.map(i => nm(a, i)).join(', ');
+  if (c.docName) out.push({ key: 'docName', tab: 'doc', text: `Name: ${c.docName}`, clear: () => set({ docName: undefined }) });
+  if (c.docId) out.push({ key: 'docId', tab: 'doc', text: `ID: ${c.docId}`, clear: () => set({ docId: undefined }) });
+  if (c.statuses?.length) out.push({ key: 'statuses', tab: 'doc', text: `Status: ${names(o?.statuses, c.statuses)}`, clear: () => set({ statuses: [] }) });
+  if (c.types?.length) out.push({ key: 'types', tab: 'doc', text: `Type: ${names(o?.types, c.types)}`, clear: () => set({ types: [] }) });
+  if (c.searchText) out.push({ key: 'searchText', tab: 'doc', text: `Text: ${c.searchText}`, clear: () => set({ searchText: undefined }) });
+  if (c.special) out.push({ key: 'special', tab: 'doc', text: `Special: ${nm(o?.specials, c.special)}`, clear: () => set({ special: undefined }) });
+  const ppl: [keyof FilterCriteria, string, IdName[] | undefined][] = [['author', 'Author', o?.accounts], ['editor', 'Editor', o?.accounts], ['verifier', 'Verifier', o?.accounts], ['releaser', 'Releaser', o?.accounts], ['publisher', 'Publisher', o?.accounts], ['distributor', 'Distributor', o?.mailLists], ['processOwner', 'Process owner', o?.owners]];
+  for (const [k, l, a] of ppl) if (c[k] !== undefined) out.push({ key: k, tab: 'control', text: `${l}: ${nm(a, c[k] as number)}`, clear: () => set({ [k]: undefined }) });
+  if (c.application) out.push({ key: 'application', tab: 'other', text: `Application: ${c.application}`, clear: () => set({ application: undefined }) });
+  if (c.language) out.push({ key: 'language', tab: 'other', text: `Language: ${c.language}`, clear: () => set({ language: undefined }) });
+  if (c.group) out.push({ key: 'group', tab: 'other', text: `Group: ${o?.groups.find(g => g.id === c.group)?.name ?? c.group}${c.unlinked ? ' (not in)' : c.includeSubgroups ? ' + subgroups' : ''}`, clear: () => set({ group: undefined, includeSubgroups: false, unlinked: false }) });
+  if (c.groupNumber) out.push({ key: 'groupNumber', tab: 'other', text: `Group no.: ${c.groupNumber}`, clear: () => set({ groupNumber: undefined }) });
+  for (const d of DATES) { const r = c[d.key]; if (r?.active) out.push({ key: d.key, tab: 'date', text: `${d.label}: ${r.from} → ${r.to}`, clear: () => set({ [d.key]: { ...r, active: false } }) }); }
+  return out;
 }
 
-function Multi({ label, options, value, onChange }: { label: string; options: IdName[]; value: number[]; onChange: (v: number[]) => void }) {
-  return (
-    <div className="fm-row">{label}
-      <div className="fm-multi" role="group" aria-label={label}>
-        {options.map(o => (
-          <label key={o.id}><input type="checkbox" checked={value.includes(o.id)}
-            onChange={e => onChange(e.target.checked ? [...value, o.id] : value.filter(x => x !== o.id))} />{o.name}</label>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-/** Options > Filter management (manual p. 73-81): create / change / delete filters with Document, Control, Other and Date Range criteria. */
+/** Options > Filter management (manual p. 73-81): saved filters with Document, People, Other and Date criteria. */
 export default function FilterManagement() {
   const { lang } = useLang();
   const qc = useQueryClient();
@@ -50,139 +62,218 @@ export default function FilterManagement() {
   const [selId, setSelId] = useState<number | 'new' | null>(null);
   const [name, setName] = useState(''); const [general, setGeneral] = useState(false); const [web, setWeb] = useState(false);
   const [c, setC] = useState<FilterCriteria>({});
+  const [base, setBase] = useState('');
   const [tab, setTab] = useState<Tab>('doc');
+  const [q, setQ] = useState(''); const [seg, setSeg] = useState<'all' | 'mine' | 'general' | 'web'>('all');
   const [askDel, setAskDel] = useState(false);
-  const [busy, setBusy] = useState(false); const [msg, setMsg] = useState<{ ok: boolean; t: string } | null>(null);
+  const [pending, setPending] = useState<number | 'new' | null | undefined>(undefined);   // selection waiting for "discard changes?"
+  const [busy, setBusy] = useState(false); const [msg, setMsg] = useState<ToastMsg>(null);
+  const [count, setCount] = useState<number | null>(null); const [counting, setCounting] = useState(false);
+  const nameRef = useRef<HTMLInputElement>(null);
 
+  const snapshot = (n = name, g = general, w = web, cc = c) => JSON.stringify({ n, g, w, cc });
+  const dirty = selId !== null && snapshot() !== base;
   const head = useMemo(() => list.data?.find(f => f.idFilter === selId), [list.data, selId]);
   const editable = selId === 'new' || (head ? head.mine || head.general : false);
+  const o = opts.data;
+  const mergeC = (p: Partial<FilterCriteria>) => setC(prev => ({ ...prev, ...p }));
   const set = <K extends keyof FilterCriteria>(k: K, v: FilterCriteria[K]) => setC(p => ({ ...p, [k]: v }));
-  const range = (k: typeof DATES[number]['key']): DateRange => c[k] ?? emptyRange();
+  const range = (k: DKey): DateRange => c[k] ?? emptyRange();
+  const chips = useMemo(() => chipsOf(c, o, mergeC), [c, o]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const tabCount = (t: Tab) => chips.filter(x => x.tab === t).length;
 
-  function startNew() { setSelId('new'); setName(''); setGeneral(false); setWeb(false); setC({}); setTab('doc'); setMsg(null); }
+  function open(id: number | 'new' | null) {
+    if (dirty && id !== selId) { setPending(id); return; }
+    go(id);
+  }
+  function go(id: number | 'new' | null) {
+    setPending(undefined); setMsg(null); setCount(null); setTab('doc');
+    setSelId(id);
+    if (id === 'new') { setName(''); setGeneral(false); setWeb(false); setC({}); setBase(snapshot('', false, false, {})); setTimeout(() => nameRef.current?.focus(), 50); }
+  }
   useEffect(() => {
     if (typeof selId !== 'number') return;
-    let live = true; setMsg(null);
+    let live = true;
     api.filter(selId).then(r => {
       if (!live) return;
       setName(r.head.name); setGeneral(r.head.general); setWeb(r.head.web); setC(r.criteria);
+      setBase(snapshot(r.head.name, r.head.general, r.head.web, r.criteria));
     }).catch(e => live && setMsg({ ok: false, t: (e as Error).message }));
     return () => { live = false; };
-  }, [selId]);
+  }, [selId]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const reset = () => { try { const b = JSON.parse(base) as { n: string; g: boolean; w: boolean; cc: FilterCriteria }; setName(b.n); setGeneral(b.g); setWeb(b.w); setC(b.cc); } catch { /* nothing saved yet */ } };
 
   const body = () => ({ name: name.trim(), general, web: web && general, criteria: c, lang });
+  // Live match count (debounced): how many documents the criteria select right now.
+  useEffect(() => {
+    if (selId === null || !o) return;
+    let live = true; setCounting(true);
+    const t = setTimeout(() => api.verifyFilter(body()).then(r => live && setCount(r.count)).catch(() => live && setCount(null)).finally(() => live && setCounting(false)), 550);
+    return () => { live = false; clearTimeout(t); };
+  }, [JSON.stringify(c), selId, !!o, lang]);   // eslint-disable-line react-hooks/exhaustive-deps
+
   async function run(fn: () => Promise<void>) { setBusy(true); setMsg(null); try { await fn(); } catch (e) { setMsg({ ok: false, t: (e as Error).message }); } finally { setBusy(false); } }
   const save = () => run(async () => {
-    if (!name.trim()) throw new Error('Please enter a filter name.');
+    if (!name.trim()) { nameRef.current?.focus(); throw new Error('Please give the filter a name.'); }
     const r = selId === 'new' ? await api.createFilter(body()) : await api.updateFilter(selId as number, body());
     await qc.invalidateQueries({ queryKey: ['filters'] }); await qc.invalidateQueries({ queryKey: ['docs'] });
-    setSelId(r.idFilter); setMsg({ ok: true, t: 'Filter saved.' });
+    setBase(snapshot()); setSelId(r.idFilter); setMsg({ ok: true, t: `Filter “${name.trim()}” saved.` });
   });
   const remove = () => run(async () => {
     if (typeof selId !== 'number') return;
-    await api.deleteFilter(selId);
-    setAskDel(false);
-    await qc.invalidateQueries({ queryKey: ['filters'] }); setSelId(null); setMsg({ ok: true, t: 'Filter deleted.' });
+    await api.deleteFilter(selId); setAskDel(false);
+    await qc.invalidateQueries({ queryKey: ['filters'] }); setBase(''); setSelId(null); setMsg({ ok: true, t: 'Filter deleted.' });
   });
-  const verify = () => run(async () => { const r = await api.verifyFilter(body()); setMsg({ ok: true, t: `${r.count} document(s) match these criteria in ${lang}.` }); });
+  const duplicate = () => { const n = name; setSelId('new'); setName(`${n} (copy)`); setGeneral(false); setWeb(false); setBase(''); setTimeout(() => nameRef.current?.select(), 50); setMsg({ ok: true, t: 'Copy created: give it a name and save.' }); };
+  useSaveShortcut(() => { if (!busy && editable && dirty) void save(); }, selId !== null);
 
-  const o = opts.data;
+  const idsOf = (a: IdName[] | undefined, re: RegExp) => (a ?? []).filter(x => re.test(x.name)).map(x => x.id);
+  const PRESETS: { ico: string; title: string; sub: string; name: string; make: () => FilterCriteria }[] = [
+    { ico: '⏳', title: 'Expired documents', sub: 'Everything past its expiry date', name: 'Expired documents', make: () => ({ statuses: idsOf(o?.statuses, /expired/i), ...(idsOf(o?.statuses, /expired/i).length ? {} : { expired: { active: true, from: '2000-01-01', to: today() } }) }) },
+    { ico: '🕵️', title: 'Waiting for verification', sub: 'Drafts and documents in edit', name: 'To verify', make: () => ({ statuses: idsOf(o?.statuses, /^(draft|edit)/i) }) },
+    { ico: '🚀', title: 'Recently published', sub: 'Published in the last 30 days', name: 'Published last 30 days', make: () => ({ statuses: idsOf(o?.statuses, /publish/i), published: { active: true, ...RANGES[2]!.make() } }) },
+    { ico: '📝', title: 'Edited this month', sub: 'Changed since the 1st', name: 'Edited this month', make: () => ({ edited: { active: true, ...RANGES[3]!.make() } }) },
+  ];
+
+  const shown = useMemo(() => (list.data ?? []).filter(f =>
+    (!q.trim() || f.name.toLowerCase().includes(q.trim().toLowerCase())) && (seg === 'all' || (seg === 'mine' ? f.mine : seg === 'general' ? f.general : f.web))), [list.data, q, seg]);
+  const n = (p: (f: FilterHead) => boolean) => list.data?.filter(p).length ?? 0;
+  const noCriteria = chips.length === 0;
+
   return (
     <div className="um">
-      <PageHero icon={<IconFilter />} title="Filter management" sub="Saved filters for the document list" chips={[{ n: list.data?.length ?? '–', label: 'filters' }, { n: list.data?.filter(x => x.general).length ?? '–', label: 'general' }]} />
-      <div className="fm">
-      <div className="card fm-list">
-        <div className="fm-list-head"><b>All filters</b>
-          <span><button className="ico-btn add" title="Add filter" aria-label="Add filter" onClick={startNew}>＋</button>
-            <button className="ico-btn del" title="Delete filter" aria-label="Delete filter" onClick={() => setAskDel(true)} disabled={busy || typeof selId !== 'number' || !editable}>−</button></span>
-        </div>
-        {list.isLoading && <PageLoader compact label="Loading filters" />}
-        {list.data?.map(f => (
-          <div key={f.idFilter} className={`fm-item ${selId === f.idFilter ? 'sel' : ''}`} onClick={() => setSelId(f.idFilter)}>
-            <span className="fm-av f"><IconFilter /></span><span className="nm">{f.name}</span>{f.general && <i title="General filter">🌐</i>}
+      <PageHero icon={<IconFilter />} title="Filter management" sub="Build saved filters for the document list: pick criteria, watch the match count, save" chips={[{ n: list.data?.length ?? '–', label: 'filters' }, { n: n(f => f.general), label: 'general' }, { n: n(f => f.web), label: 'web' }]} />
+      <div className="fx">
+        <aside className="card fx-list">
+          <button className="fx-new" onClick={() => open('new')}><span>＋</span> New filter</button>
+          <div className="fx-search"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg><input value={q} onChange={e => setQ(e.target.value)} placeholder="Search filters" aria-label="Search filters" /></div>
+          <div className="fx-seg" role="tablist">
+            {([['all', 'All', list.data?.length ?? 0], ['mine', 'Mine', n(f => f.mine)], ['general', 'General', n(f => f.general)], ['web', 'Web', n(f => f.web)]] as ['all' | 'mine' | 'general' | 'web', string, number][]).map(([k, l, c2]) =>
+              <button key={k} role="tab" aria-selected={seg === k} className={seg === k ? 'on' : ''} onClick={() => setSeg(k)}>{l}<em>{c2}</em></button>)}
           </div>
-        ))}
-        {list.data?.length === 0 && <div className="mh" style={{ padding: 10 }}>No filters yet. Click ＋ to add one.</div>}
-      </div>
+          <div className="fx-items">
+            {list.isLoading && <PageLoader compact label="Loading filters" />}
+            {shown.map(f => (
+              <button key={f.idFilter} className={`fx-item ${selId === f.idFilter ? 'sel' : ''}`} onClick={() => open(f.idFilter)}>
+                <span className={`ico ${f.general ? 'g' : 'm'}`}><IconFilter /></span>
+                <span className="tx"><b>{f.name}</b><small>{f.mine ? 'Yours' : 'Shared'}{f.general ? ' · General' : ''}{f.web ? ' · Web' : ''}</small></span>
+                {!f.mine && !f.general && <i title="Read only">🔒</i>}
+              </button>
+            ))}
+            {!list.isLoading && shown.length === 0 && <div className="fx-empty">{list.data?.length ? 'No filter matches.' : 'No filters yet. Create the first one!'}</div>}
+          </div>
+        </aside>
 
-      <div className="card fm-edit">
-        {selId === null ? <div className="mh" style={{ padding: 20 }}>Select a filter on the left or add a new one.</div> : (<>
-          <fieldset className="fm-box"><legend>Filter</legend>
-            <div className="fm-top">
-              <div className="fm-fields">
-                <label className="fm-row">Name<input value={name} maxLength={100} onChange={e => setName(e.target.value)} disabled={!editable} /></label>
-                <label className="fm-chk"><input type="checkbox" checked={general} disabled={!editable}
-                  onChange={e => { setGeneral(e.target.checked); if (!e.target.checked) setWeb(false); }} />General filter (shown to all users)</label>
-                <label className="fm-chk"><input type="checkbox" checked={web} disabled={!editable || !general} onChange={e => setWeb(e.target.checked)} />Web publishing (only for general filters)</label>
+        <section className="card fx-edit">
+          {selId === null ? (
+            <div className="fx-hero">
+              <div className="big">🎯</div><h3>Pick a filter, or build a new one</h3>
+              <p>Filters narrow the document list to exactly what you need. Combine status, type, people and dates, and see how many documents match while you work.</p>
+              <button className="btn-primary" onClick={() => open('new')}>＋ New filter</button>
+            </div>
+          ) : (<>
+            <div className="fx-head">
+              <div className="fx-namebox">
+                <input ref={nameRef} value={name} maxLength={100} onChange={e => setName(e.target.value)} disabled={!editable} placeholder="Name your filter…" aria-label="Filter name" />
+                <div className={`fx-count ${counting ? 'busy' : ''}`} title="Documents matching these criteria in the current language">
+                  {counting ? <Spinner /> : <b>{count ?? '–'}</b>}<span>match{count === 1 ? 'es' : ''} · {lang}</span>
+                </div>
               </div>
-              <div className="fm-btns">
-                <button className="btn-primary" onClick={save} disabled={busy || !editable}>{busy ? <Spinner /> : 'Save'}</button>
-                <button className="btn-ghost" onClick={verify} disabled={busy}>Verify</button>
-                {typeof selId === 'number' && <button className="btn-ghost" onClick={() => nav(`/documents?filter=${selId}`)}>Show documents</button>}
+              <div className="fx-switches">
+                <Switch checked={general} disabled={!editable} onChange={v => { setGeneral(v); if (!v) setWeb(false); }} label="General filter" desc="Visible to all users" />
+                <Switch checked={web && general} disabled={!editable || !general} onChange={setWeb} label="Web publishing" desc={general ? 'Also offered on the website' : 'Needs “General filter”'} />
               </div>
+              {!editable && <div className="fx-ro">🔒 This filter belongs to another user. You can look at it, but not change it.</div>}
             </div>
-          </fieldset>
-          {opts.isLoading || !o ? <PageLoader compact label="Loading options" /> : (<>
-            <div className="fm-tabs" role="tablist">
-              {([['doc', 'Document'], ['control', 'Control'], ['other', 'Other'], ['date', 'Date Range']] as [Tab, string][]).map(([k, l]) =>
-                <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{l}</button>)}
+
+            {selId === 'new' && noCriteria && o && (
+              <div className="fx-start"><h6>Quick start</h6>
+                <div className="fx-presets">{PRESETS.map(p => (
+                  <button key={p.title} onClick={() => { setC(p.make()); if (!name.trim()) setName(p.name); }}><span>{p.ico}</span><b>{p.title}</b><small>{p.sub}</small></button>))}</div>
+              </div>)}
+
+            <div className="fx-chips" aria-label="Active criteria">
+              {noCriteria ? <span className="fx-hint">No criteria yet: this filter shows all documents.</span> : <>
+                {chips.map(x => <span key={x.key} className="fx-chip" onClick={() => setTab(x.tab)}>{x.text}<button aria-label={`Remove ${x.text}`} disabled={!editable} onClick={e => { e.stopPropagation(); x.clear(); }}>×</button></span>)}
+                {editable && <button className="fx-clear" onClick={() => setC({})}>Clear all</button>}</>}
             </div>
-            <div className="fm-pane" style={editable ? undefined : { pointerEvents: 'none', opacity: .6 }}>
-              {tab === 'doc' && (<>
-                <label className="fm-row">Document name<input value={c.docName ?? ''} onChange={e => set('docName', e.target.value)} /></label>
-                <label className="fm-row">Document ID<input value={c.docId ?? ''} placeholder="e.g. 121 or 121;130" onChange={e => set('docId', e.target.value)} /></label>
-                <Multi label="Document status" options={o.statuses} value={c.statuses ?? []} onChange={v => set('statuses', v)} />
-                <Multi label="Document type" options={o.types} value={c.types ?? []} onChange={v => set('types', v)} />
-                <label className="fm-row">Search text in document<input value={c.searchText ?? ''} onChange={e => set('searchText', e.target.value)} placeholder="words in the document name" /></label>
-                <Pick label="Special filters" value={c.special} onChange={v => set('special', v)} options={o.specials} />
-              </>)}
-              {tab === 'control' && (<>
-                <Pick label="Author" value={c.author} onChange={v => set('author', v)} options={o.accounts} />
-                <Pick label="Editor" value={c.editor} onChange={v => set('editor', v)} options={o.accounts} />
-                <Pick label="Verifier" value={c.verifier} onChange={v => set('verifier', v)} options={o.accounts} />
-                <Pick label="Releaser" value={c.releaser} onChange={v => set('releaser', v)} options={o.accounts} />
-                <Pick label="Publisher" value={c.publisher} onChange={v => set('publisher', v)} options={o.accounts} />
-                <Pick label="Distributor" value={c.distributor} onChange={v => set('distributor', v)} options={o.mailLists} />
-                <Pick label="Process owner" value={c.processOwner} onChange={v => set('processOwner', v)} options={o.owners} />
-              </>)}
-              {tab === 'other' && (<>
-                <label className="fm-row">Application
-                  <select value={c.application ?? ''} onChange={e => set('application', e.target.value || undefined)}>
-                    <option value="">-</option>{o.extensions.map(x => <option key={x} value={x}>{x}</option>)}
-                  </select></label>
-                <label className="fm-row">Language
-                  <select value={c.language ?? ''} onChange={e => set('language', e.target.value || undefined)}>
-                    <option value="">-</option>{o.languages.map(x => <option key={x.id} value={x.id}>{x.id} – {x.name}</option>)}
-                  </select></label>
-                <label className="fm-row">Group
-                  <select value={c.group ?? ''} onChange={e => set('group', e.target.value ? Number(e.target.value) : undefined)}>
-                    <option value="">-</option>{o.groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
-                  </select></label>
-                <label className="fm-row">Group number<input value={c.groupNumber ?? ''} placeholder="e.g. G45" onChange={e => set('groupNumber', e.target.value)} /></label>
-                <label className="fm-chk"><input type="checkbox" checked={!!c.includeSubgroups} disabled={!c.group || !!c.unlinked} onChange={e => set('includeSubgroups', e.target.checked)} />Include subgroups</label>
-                <label className="fm-chk"><input type="checkbox" checked={!!c.unlinked} disabled={!c.group} onChange={e => set('unlinked', e.target.checked)} />Unlinked documents (not in the selected group)</label>
-              </>)}
-              {tab === 'date' && (<>
-                <p className="mh">Date range filters are inactive by default; tick “Activate” to use one. All active ranges work together with the other criteria.</p>
-                {DATES.map(d => {
-                  const r = range(d.key);
-                  return (
-                    <div key={d.key} className="fm-date">
-                      <label className="fm-chk"><input type="checkbox" checked={r.active} onChange={e => set(d.key, { ...r, active: e.target.checked })} /><b>{d.label}</b> – Activate</label>
-                      <label>From<input type="date" value={r.from} disabled={!r.active} onChange={e => set(d.key, { ...r, from: e.target.value })} /></label>
-                      <label>To<input type="date" value={r.to} disabled={!r.active} onChange={e => set(d.key, { ...r, to: e.target.value })} /></label>
-                    </div>
-                  );
-                })}
-              </>)}
-            </div>
+
+            {opts.isLoading || !o ? <PageLoader compact label="Loading options" /> : (<>
+              <div className="fx-tabs" role="tablist">
+                {(['doc', 'control', 'other', 'date'] as Tab[]).map(k => (
+                  <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>
+                    <span>{TAB_ICO[k]}</span>{TAB_LBL[k]}{tabCount(k) > 0 && <em>{tabCount(k)}</em>}</button>))}
+              </div>
+              <div className={`fx-pane ${editable ? '' : 'ro'}`}>
+                {tab === 'doc' && (<>
+                  <div className="fx-grid2">
+                    <div className="fx-field"><div className="fx-lbl">Document name</div><input className="fx-in" value={c.docName ?? ''} placeholder="Part of the name" onChange={e => set('docName', e.target.value)} /></div>
+                    <div className="fx-field"><div className="fx-lbl">Document ID</div><input className="fx-in" value={c.docId ?? ''} placeholder="e.g. 121 or 121;130" onChange={e => set('docId', e.target.value)} /></div>
+                  </div>
+                  <Pills label="Status" options={o.statuses} value={c.statuses ?? []} onChange={v => set('statuses', v)} />
+                  <Pills label="Document type" options={o.types} value={c.types ?? []} onChange={v => set('types', v)} />
+                  <div className="fx-grid2">
+                    <div className="fx-field"><div className="fx-lbl">Search text</div><input className="fx-in" value={c.searchText ?? ''} placeholder="Words in the document name" onChange={e => set('searchText', e.target.value)} /></div>
+                    <Combo label="Special filter" options={o.specials} value={c.special} onChange={v => set('special', v)} />
+                  </div>
+                </>)}
+                {tab === 'control' && (
+                  <div className="fx-grid2">
+                    <Combo label="Author" options={o.accounts} value={c.author} onChange={v => set('author', v)} />
+                    <Combo label="Editor" options={o.accounts} value={c.editor} onChange={v => set('editor', v)} />
+                    <Combo label="Verifier" options={o.accounts} value={c.verifier} onChange={v => set('verifier', v)} />
+                    <Combo label="Releaser" options={o.accounts} value={c.releaser} onChange={v => set('releaser', v)} />
+                    <Combo label="Publisher" options={o.accounts} value={c.publisher} onChange={v => set('publisher', v)} />
+                    <Combo label="Distributor (mailing list)" options={o.mailLists} value={c.distributor} onChange={v => set('distributor', v)} />
+                    <Combo label="Process owner" options={o.owners} value={c.processOwner} onChange={v => set('processOwner', v)} />
+                  </div>)}
+                {tab === 'other' && (<>
+                  <div className="fx-grid2">
+                    <div className="fx-field"><div className="fx-lbl">Application (file type)</div>
+                      <select className="fx-in" value={c.application ?? ''} onChange={e => set('application', e.target.value || undefined)}><option value="">Any</option>{o.extensions.map(x => <option key={x} value={x}>{x}</option>)}</select></div>
+                    <div className="fx-field"><div className="fx-lbl">Language</div>
+                      <select className="fx-in" value={c.language ?? ''} onChange={e => set('language', e.target.value || undefined)}><option value="">Any</option>{o.languages.map(x => <option key={x.id} value={x.id}>{x.id} – {x.name}</option>)}</select></div>
+                    <Combo label="Group (folder)" options={o.groups} value={c.group} onChange={v => set('group', v)} />
+                    <div className="fx-field"><div className="fx-lbl">Group number</div><input className="fx-in" value={c.groupNumber ?? ''} placeholder="e.g. G45" onChange={e => set('groupNumber', e.target.value)} /></div>
+                  </div>
+                  <div className="fx-switches col">
+                    <Switch checked={!!c.includeSubgroups} disabled={!c.group || !!c.unlinked} onChange={v => set('includeSubgroups', v)} label="Include subgroups" desc="Also documents in the folders below the chosen group" />
+                    <Switch checked={!!c.unlinked} disabled={!c.group} onChange={v => set('unlinked', v)} label="Unlinked documents" desc="Documents that are NOT in the chosen group" />
+                  </div>
+                </>)}
+                {tab === 'date' && (<>
+                  <p className="fx-hint">Switch a date range on to use it. All active ranges work together with the other criteria.</p>
+                  {DATES.map(d => {
+                    const r = range(d.key);
+                    return (
+                      <div key={d.key} className={`fx-date ${r.active ? 'on' : ''}`}>
+                        <Switch checked={r.active} disabled={!editable} onChange={v => set(d.key, { ...r, active: v })} label={<>{d.ico} {d.label}</>} />
+                        <div className="rng">
+                          <label>From<input type="date" value={r.from} disabled={!r.active} max={r.to} onChange={e => set(d.key, { ...r, from: e.target.value })} /></label>
+                          <label>To<input type="date" value={r.to} disabled={!r.active} min={r.from} onChange={e => set(d.key, { ...r, to: e.target.value })} /></label>
+                        </div>
+                        <div className="quick">{RANGES.map(p => <button key={p.label} type="button" disabled={!editable} onClick={() => set(d.key, { active: true, ...p.make() })}>{p.label}</button>)}</div>
+                      </div>);
+                  })}
+                </>)}
+              </div>
+            </>)}
+
+            <SaveBar dirty={dirty} busy={busy} canSave={editable && !!name.trim()} onSave={() => void save()} onReset={reset}>
+              {typeof selId === 'number' && <>
+                <button className="btn-ghost" onClick={() => nav(`/documents?filter=${selId}`)}>Show documents</button>
+                <button className="btn-ghost" onClick={duplicate}>Duplicate</button>
+                <button className="btn-ghost danger" onClick={() => setAskDel(true)} disabled={busy || !editable}>Delete</button></>}
+            </SaveBar>
           </>)}
-        </>)}
+        </section>
       </div>
       {askDel && <ConfirmDialog danger title="Delete filter?" confirmLabel="Delete" busy={busy}
         message={<>The filter <b>{name}</b> will be removed for {general ? 'all users' : 'you'}. This cannot be undone.</>}
-        onConfirm={async () => { await remove(); setAskDel(false); }} onCancel={() => setAskDel(false)} />}
-      </div>
+        onConfirm={remove} onCancel={() => setAskDel(false)} />}
+      {pending !== undefined && <ConfirmDialog title="Discard your changes?" confirmLabel="Discard" busy={false}
+        message={<>You changed <b>{name || 'this filter'}</b> and did not save it. If you continue, the changes are lost.</>}
+        onConfirm={() => go(pending)} onCancel={() => setPending(undefined)} />}
       <Toast msg={msg} onClose={() => setMsg(null)} />
     </div>
   );
