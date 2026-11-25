@@ -163,6 +163,9 @@ export type WfRun = { run: number; current: boolean; workflow: string; data: { r
 export type WfTaskItem = { taskId: number; idDoc: number; lang: string; docName: string; ext?: string; status: number; statusName: string; version: string; workflow: string; step: string;
   layer: number; layerName: string; startedBy: string; assigned?: string; due?: string; overdue: boolean; remark: string };
 export type WfTaskNote = { taskId: number; idDoc: number; lang: string; docName: string; workflow: string; step: string; layer: number; layerName: string; startedBy: string; assigned?: string; due?: string; overdue: boolean };
+export type ContentItem = { idDoc: number; lang: string; docName: string; ext: string; status: number; statusName: string; version: string; snippet: string; score: number };
+export type ContentSearch = { items: ContentItem[]; indexed: number; running: boolean };
+export type IndexStatus = { documents: number; pending: number; running: boolean; lastStart?: string; lastEnd?: string; indexed: number; skipped: number; failed: number; note?: string };
 export type WfSummary = { enabled: boolean; total: number; overdue: number; counts: number[]; items: WfTaskNote[] };
 export type WfTasks = { enabled: boolean; counts: number[]; layerNames?: string[]; items: WfTaskItem[] };
 export type WfHandOver = { lang: string; nextMoveId: number; editorId: number; due?: string | null; remark?: string };
@@ -286,6 +289,9 @@ export const api = {
   wfRemove: (docId: number, lang: string, reason: string) => req<{ removed: boolean }>(`/api/lds/documents/${docId}/workflow/remove`, { method: 'POST', body: JSON.stringify({ lang, reason }) }),
   wfHistory: (docId: number, lang: string) => req<{ runs: WfRun[] }>(`/api/lds/documents/${docId}/workflow/history?lang=${encodeURIComponent(lang)}`),
   wfMailTest: (lang: string) => req<{ ok: boolean; message: string }>('/api/lds/workflow/mail-test', { method: 'POST', body: JSON.stringify({ lang }) }),
+  searchContent: (q: string, lang: string, limit = 8) => req<ContentSearch>(`/api/lds/search/content?q=${encodeURIComponent(q)}&lang=${encodeURIComponent(lang)}&limit=${limit}`),
+  searchStatus: () => req<IndexStatus>('/api/lds/search/status'),
+  reindex: (full: boolean) => req<{ started: boolean; full: boolean }>(`/api/lds/search/reindex?full=${full}`, { method: 'POST' }),
   wfSummary: () => req<WfSummary>('/api/lds/workflow/tasks/summary'),
   wfTasks: (lang: string, layer = 0) => req<WfTasks>(`/api/lds/workflow/tasks?lang=${encodeURIComponent(lang)}&layer=${layer}`),
   workflowOptions: () => req<{ validateOnRelease: boolean }>('/api/lds/workflow/options'),

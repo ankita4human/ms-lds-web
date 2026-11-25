@@ -10,7 +10,7 @@ import { loadConvs, newConv, saveConvs, setActive, titleOf } from './assistantSt
 
 const GROUPS: { title: string; items: { ico: string; label: string; q: string }[] }[] = [
   { title: 'Find', items: [
-    { ico: '🔎', label: 'Search by name', q: 'Search "quality manual"' }, { ico: '🚀', label: 'Published', q: 'Show published documents' },
+    { ico: '🔎', label: 'Search by name', q: 'Search "quality manual"' }, { ico: '📚', label: 'Text inside documents', q: 'Which documents mention release?' }, { ico: '🚀', label: 'Published', q: 'Show published documents' },
     { ico: '⏳', label: 'Expired', q: 'Expired documents' }, { ico: '✍️', label: 'My drafts', q: 'Drafts created by me' }] },
   { title: 'My work', items: [
     { ico: '✅', label: 'My pending tasks', q: 'Show my pending tasks' }, { ico: '📊', label: 'System overview', q: 'Give me an overview' }] },

@@ -26,6 +26,9 @@ builder.Services.AddSingleton<PhaseLift.Api.DocPublisher>();
 builder.Services.AddSingleton<PhaseLift.Api.MailService>();
 builder.Services.AddSingleton<PhaseLift.Api.PublishQueue>();
 builder.Services.AddHostedService<PhaseLift.Api.PublishWorker>();
+builder.Services.AddSingleton<PhaseLift.Api.DocTextIndex>();
+builder.Services.AddSingleton<PhaseLift.Api.DocIndexWorker>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<PhaseLift.Api.DocIndexWorker>());
 builder.Services.AddHostedService<PhaseLift.Api.Controllers.ExpiryWorker>();
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(o =>
 {

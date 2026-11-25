@@ -18,6 +18,11 @@ export function Md({ text }: { text: string }) {
   return <>{out}</>;
 }
 
+/** Text with [[matches]] marked by the search; shown highlighted. */
+export function Snip({ text }: { text: string }) {
+  return <>{text.split(/(\[\[.*?\]\])/g).map((p, i) => (p.startsWith('[[') ? <mark key={i}>{p.slice(2, -2)}</mark> : <span key={i}>{p}</span>))}</>;
+}
+
 export const hhmm = (t: number) => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
 /** Reveals text progressively (typewriter) when `animate` is on; finished text is shown at once. */
@@ -45,6 +50,28 @@ export function MessageExtras({ m, go, ask, showFollow, busy }: { m: Msg; go: (t
           <div className="bot-doc-name">{t.docName}</div>
           <div className="bot-doc-meta">{t.workflow} · {t.step}{t.due ? ` · due ${fmtDate(t.due)}` : ''}{t.overdue ? ' · overdue' : ''}</div>
         </button>))}</div>}
+      {m.hits && m.hits.length > 0 && (
+        <div className="bot-results">
+          {m.hits.map(h => (
+            <button key={`${h.idDoc}${h.lang}`} className="bot-doc hit" onClick={() => go(`/documents?doc=${h.idDoc}`)}>
+              <div className="bot-doc-top"><b>#{h.idDoc} · {h.ext ? h.ext.toUpperCase() : 'FILE'} · v{h.version}</b><StatusBadge id={h.status} name={h.statusName} /></div>
+              <div className="bot-doc-name">{h.docName}</div>
+              <div className="bot-snip"><Snip text={h.snippet} /></div>
+            </button>
+          ))}
+        </div>
+      )}
+      {m.manual && m.manual.length > 0 && (
+        <div className="bot-results">
+          {m.manual.map((h, i) => (
+            <div key={i} className="bot-man">
+              <div className="bot-man-top"><span>📖 User manual</span><b>page {h.p}</b></div>
+              <div className="bot-man-h">{h.h}</div>
+              <div className="bot-snip"><Snip text={h.snippet} /></div>
+            </div>
+          ))}
+        </div>
+      )}
       {m.docs && m.docs.length > 0 && (
         <div className="bot-results">
           {m.docs.map(d => (

@@ -1,4 +1,5 @@
-import { api, type DocQuery, type DocRow, type Stats, type WfSummary } from '../api';
+import { api, type ContentItem, type DocQuery, type DocRow, type Stats, type WfSummary } from '../api';
+import { confident, searchManual, type ManualHit } from './manualSearch';
 import { KB, lookup, fixTypos, type Kb } from './chatKnowledge';
 
 /* ---------- Prompt understanding (rule based, runs in the browser; no external AI service) ---------- */
@@ -61,7 +62,7 @@ export type Action = { label: string; to: string };
 export type Tile = { label: string; value: number | string; tone: string; to: string };
 export type Reply = {
   text?: string; chips?: string[]; docs?: DocRow[]; total?: number; query?: DocQuery; actions?: Action[]; follow?: string[];
-  tiles?: Tile[]; tasks?: WfSummary['items']; progress?: { i: number; n: number }; navigate?: string;
+  tiles?: Tile[]; tasks?: WfSummary['items']; progress?: { i: number; n: number }; navigate?: string; hits?: ContentItem[]; manual?: ManualHit[];
 };
 export type Msg = Reply & { id: number; from: 'bot' | 'me'; time: number; fb?: 'up' | 'down' };
 /** What the assistant remembers inside one conversation. */
@@ -109,6 +110,52 @@ function guideStep(e: Kb, i: number, ctx: Ctx): Reply {
   };
 }
 
+
+// ---------- knowledge search: the text inside the documents (server index) and the user manual (offline) ----------
+const clean = (t: string) => t.replace(/^["“'‘]+|["”'’?.!]+$/g, '').replace(/\s+/g, ' ').trim();
+/** Pulls the search term out of "which documents mention X", "search X in my documents", "find the text X"… */
+function contentTerm(raw: string): { term: string; scope: 'docs' | 'manual' | 'both' } | null {
+  const t = raw.trim().replace(/\s+/g, ' ');
+  let m = t.match(/^(?:please )?(?:search|find|look)(?: up| for)?\s+(.+?)\s+(?:in|inside|within|from|across)\s+(?:the\s+|my\s+|all\s+|our\s+)?(?:user\s+)?(manual|guide|handbook)\b/i);
+  if (m) return { term: clean(m[1]!), scope: 'manual' };
+  m = t.match(/^(?:please )?(?:search|find|look)(?: up| for)?\s+(?:the\s+)?(?:manual|guide|handbook)\s*(?:for|about|on|:)?\s*(.+)$/i) ?? t.match(/^(?:in|from) the (?:user )?(?:manual|guide)[,:]?\s*(.+)$/i);
+  if (m) return { term: clean(m[1]!), scope: 'manual' };
+  m = t.match(/^(?:please )?(?:search|find|look)(?: up| for)?\s+(.+?)\s+(?:in|inside|within|across)\s+(?:the\s+|my\s+|all\s+|our\s+)?(?:documents?|docs?|files?|content|text|texts|knowledge ?base|kb)\b/i);
+  if (m) return { term: clean(m[1]!), scope: 'docs' };
+  m = t.match(/\b(?:which|what|any|are there)\s+(?:documents?|docs?|files?)\s+(?:that\s+)?(?:mention|mentions|contain|contains|include|includes|talk(?:s)? about|say|says|describe|describes|have|has)\s+(.+)$/i)
+    ?? t.match(/\b(?:in which|where in)\s+(?:documents?|docs?)\b.*?\b(?:is|are|does|do)\s+(.+?)\s+(?:mentioned|described|written|stated|explained|used|found)\b/i)
+    ?? t.match(/\bwhere\s+(?:is|are|does)\s+(.+?)\s+(?:mentioned|described|written|stated|explained|used|found)\b/i);
+  if (m) return { term: clean(m[1]!), scope: 'both' };
+  m = t.match(/\b(?:full[- ]?text|content search|text search|search (?:the )?(?:content|text)|knowledge ?base)\b\s*(?:search\s+)?(?:for|of|on|about|:)?\s*(.+)$/i)
+    ?? t.match(/^(?:please )?(?:search|find|look)(?: up| for)?\s+(?:the\s+)?(?:text|word|words|phrase|sentence|term)\s+(.+?)(?:\s+in\s+.*)?$/i);
+  if (m) return { term: clean(m[1]!), scope: 'both' };
+  return null;
+}
+
+/** Looks in the document texts and the manual. Returns null when neither has anything convincing. */
+async function knowledge(term: string, env: Env, scope: 'docs' | 'manual' | 'both', ctx: Ctx, lead?: string): Promise<Reply | null> {
+  const [docs, man] = await Promise.all([
+    scope === 'manual' ? Promise.resolve(null) : api.searchContent(term, env.lang, 6).catch(() => null),
+    scope === 'docs' ? Promise.resolve([] as ManualHit[]) : searchManual(term, 3),
+  ]);
+  const hits = docs?.items ?? [];
+  const mh = (man ?? []).filter((h, i) => i === 0 ? confident(h) || scope === 'manual' : confident(h));
+  if (!hits.length && !mh.length) return null;
+  ctx.topic = undefined;
+  const parts: string[] = [];
+  if (lead) parts.push(lead);
+  if (hits.length) parts.push(`**${hits.length}${hits.length >= 6 ? '+' : ''}** document${hits.length === 1 ? '' : 's'} contain “${term}”. The best matches are first:`);
+  if (mh.length) parts.push(`${hits.length ? 'And the' : 'The'} **user manual** has ${mh.length === 1 ? 'a passage' : 'passages'} on this:`);
+  return { text: parts.join('\n\n'), hits: hits.length ? hits : undefined, manual: mh.length ? mh : undefined, follow: hits.length ? ['Give me an overview'] : undefined };
+}
+
+async function emptyIndexNote(): Promise<string> {
+  const s = await api.searchStatus().catch(() => null);
+  if (!s) return '';
+  if (s.documents === 0) return s.running ? ' The document index is being built right now, try again in a few minutes.' : ` The document index is still empty${s.note ? ' (' + s.note + ')' : ''}. An administrator can say “rebuild the search index”.`;
+  return ` (I searched ${s.documents} indexed documents${s.running ? ', the index is still being updated' : ''}.)`;
+}
+
 const WELCOME_FOLLOW = ['Show my pending tasks', 'Give me an overview', 'How do I add a document?'];
 
 export async function respond(raw: string, env: Env, ctx: Ctx): Promise<Reply> {
@@ -142,7 +189,7 @@ export async function respond(raw: string, env: Env, ctx: Ctx): Promise<Reply> {
   if (/\b(tell me a joke|joke)\b/.test(low)) return { text: 'Why did the document go to the doctor? It was feeling **expired**. 😄 Shall we find some?', follow: ['Expired documents'] };
   if (/^(help|\?|what can you do|menu|commands?|capabilities)\s*\??$/.test(low) || /\bwhat can you (do|help)\b/.test(low)) {
     ctx.topic = undefined;
-    return { text: '**Here is what I can do**\n- **Find documents**: “published documents by martin”, “drafts created by me”, “expired documents”, “document 1234”, or a name in quotes.\n- **Your work**: “my pending tasks”, “give me an overview”.\n- **Explain MS LDS**: “how do I release a document?”, “what does Verified mean?”, “how to create a workflow?”, “what is a catchword?”.\n- **Guide you**: say “walk me through it” and I go step by step.\n- **Take you places**: “open workflow management”, “where are the tags?”.\n\nYou can also write casually, typos are fine.', follow: ['Show my pending tasks', 'Walk me through adding a document', 'Give me an overview'] };
+    return { text: '**Here is what I can do**\n- **Find documents**: “published documents by martin”, “drafts created by me”, “expired documents”, “document 1234”, or a name in quotes.\n- **Search inside your documents** (full text) and **the user manual**: “which documents mention release?”, “search tags in the manual”, “find the text quality policy”.\n- **Your work**: “my pending tasks”, “give me an overview”.\n- **Explain MS LDS**: “how do I release a document?”, “what does Verified mean?”, “how to create a workflow?”, “what is a catchword?”.\n- **Guide you**: say “walk me through it” and I go step by step.\n- **Take you places**: “open workflow management”, “where are the tags?”.\n\nYou can also write casually, typos are fine.', follow: ['Show my pending tasks', 'Walk me through adding a document', 'Give me an overview'] };
   }
 
   // ---- explicit topic pick from a clarification ----
@@ -168,6 +215,23 @@ export async function respond(raw: string, env: Env, ctx: Ctx): Promise<Reply> {
   if (/\b(walk me through|step by step|guide me|show me the steps|one by one|lead me)\b/.test(low) || /^walk me through it\b/.test(low)) {
     const t = lookup(fixTypos(low), 1)[0]?.e; const e = (t && /adding|add|release|publish|verify|workflow|rename|edit|assign/.test(low) ? t : null) ?? cur ?? t;
     if (e) { if (stepsOf(e).length >= 2) return { ...guideStep(e, 0, ctx), text: `Let us do **${e.title}** together. I will give you one step at a time, say **next** when you are ready.\n\n**Step 1 of ${stepsOf(e).length}**\n${stepsOf(e)[0]}` }; return answer(e, ctx); }
+  }
+
+  // ---- index administration ----
+  if (/\b(re-?index|rebuild)\b.*\b(search|index|documents?|content|knowledge)\b|^re-?index\b/.test(low)) {
+    try { const full = /\b(rebuild|full|everything|all)\b/.test(low); await api.reindex(full); return { text: full ? 'Started a **full rebuild** of the search index. It runs in the background; large archives can take a while.' : 'Started an **index update**: only new or changed files are read.', follow: ['How many documents are indexed?'] }; }
+    catch (e) { return { text: (e as Error).message }; }
+  }
+  if (/\b(index|search) (status|state)\b|\bhow many documents (are |were )?(indexed|searchable)\b|\bis (the )?(search|index) (ready|up to date|working)\b/.test(low)) {
+    const st = await api.searchStatus();
+    return { text: `**Search index**\n- Documents indexed: **${st.documents}**\n- ${st.running ? `Scanning now, ${st.pending} left to check` : st.lastEnd ? `Last scan finished ${new Date(st.lastEnd).toLocaleString()}` : 'No scan has finished yet'}\n- Last scan: ${st.indexed} new or changed, ${st.skipped} skipped (no file or unsupported type), ${st.failed} could not be read${st.note ? `\n- Note: ${st.note}` : ''}`, follow: ['Rebuild the search index'] };
+  }
+  // ---- search inside documents / the manual ----
+  const ct = contentTerm(original);
+  if (ct && ct.term.length >= 2) {
+    const r = await knowledge(ct.term, env, ct.scope, ctx);
+    if (r) return r;
+    return { text: `I found nothing for “${ct.term}” ${ct.scope === 'manual' ? 'in the manual' : ct.scope === 'docs' ? 'inside your documents' : 'in your documents or the manual'}.${ct.scope !== 'manual' ? await emptyIndexNote() : ''} Try another word or fewer words.`, follow: ['Help'] };
   }
 
   // ---- my tasks ----
@@ -209,7 +273,10 @@ export async function respond(raw: string, env: Env, ctx: Ctx): Promise<Reply> {
     if (second && second.score >= 3 && second.score > top!.score * 0.8 && second.e.id !== top!.e.id && !isQuestion(fixed)) {
       return { text: 'Your question fits more than one topic. Which one do you mean?', follow: [top!.e, second.e].map(x => 'Explain: ' + x.title) };
     }
-    return answer(top!.e, ctx, isQuestion(fixed));
+    const rep = answer(top!.e, ctx, isQuestion(fixed));
+    const mh = await searchManual(fixed, 1);
+    if (mh[0] && confident(mh[0])) rep.manual = mh;
+    return rep;
   }
   if (searchy) {
     ctx.topic = undefined;
@@ -222,6 +289,8 @@ export async function respond(raw: string, env: Env, ctx: Ctx): Promise<Reply> {
       follow: res.total === 0 ? ['Expired documents', 'Show published documents'] : ['Give me an overview', 'Show my pending tasks'],
     };
   }
+  const kn = await knowledge(fixed, env, 'both', ctx, 'I could not match that to a ready answer, but I searched the knowledge I have:');
+  if (kn) return kn;
   if (top) return answer(top.e, ctx, true);
   return { text: `I am not sure I understood${first ? ', ' + first : ''}. I can search documents (“published by martin”), explain a function (“how do I release a document?”) or open a page (“open tags”). Try one of these:`, follow: ['Help', 'Show my pending tasks', 'How does a workflow work?'] };
 }

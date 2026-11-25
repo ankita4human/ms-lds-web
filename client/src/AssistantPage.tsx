@@ -17,9 +17,9 @@ const CARDS: { ico: string; title: string; sub: string; q: string; tone: string 
   { ico: '🧭', title: 'Add a document', sub: 'Walk me through it, step by step', q: 'Walk me through adding a document', tone: 'c' },
   { ico: '🚀', title: 'Release & publish', sub: 'How verify, release and publish work', q: 'How do I release and publish a document?', tone: 'd' },
   { ico: '🔀', title: 'Workflows', sub: 'Create one and use it on documents', q: 'How do I create a workflow?', tone: 'e' },
-  { ico: '🔎', title: 'Find documents', sub: 'e.g. published documents by martin', q: 'Show published documents', tone: 'f' },
+  { ico: '🔎', title: 'Search inside documents', sub: 'Full text in your files and in the manual', q: 'Which documents mention release?', tone: 'f' },
 ];
-const IDEAS = ['What does Verified mean?', 'How do I rename a document?', 'What is a catchword?', 'Expired documents', 'Where are the tags?', 'How do I freeze a document?'];
+const IDEAS = ['Search "e-mail distribution" in the manual', 'What does Verified mean?', 'How do I rename a document?', 'What is a catchword?', 'Expired documents', 'Where are the tags?', 'How do I freeze a document?'];
 let seq = Date.now();
 
 const dayGroup = (t: number) => {

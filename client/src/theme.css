@@ -1245,3 +1245,12 @@ html[data-theme="dark"] .modal-back{background:rgba(255,255,255,.35)}
   .ai-burger{display:grid;place-items:center}.ai-cards{grid-template-columns:1fr 1fr}.ai-title .pill{display:none}
 }
 @media (max-width:560px){.ai-cards{grid-template-columns:1fr}}
+
+/* ---- Knowledge hits (document text + manual) ---- */
+.bot-snip{font-size:12.5px;line-height:1.5;color:#4a5170;margin-top:4px}
+.bot-snip mark{background:#fff0a8;color:#3b3200;border-radius:4px;padding:0 2px;font-weight:600}
+.bot-doc.hit{border-left:3px solid #6366f1}
+.bot-man{border:1px solid #e0e3f8;border-left:3px solid #a855f7;border-radius:14px;padding:9px 12px;background:linear-gradient(180deg,#fff,#faf7ff)}
+.bot-man-top{display:flex;justify-content:space-between;font-size:11.5px;color:#7c3aed;font-weight:700}
+.bot-man-top b{background:#f1eaff;border-radius:999px;padding:1px 9px}
+.bot-man-h{font-weight:650;font-size:13px;color:#2b2f55;margin-top:3px}
