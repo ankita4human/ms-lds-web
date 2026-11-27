@@ -224,7 +224,7 @@ export async function respond(raw: string, env: Env, ctx: Ctx): Promise<Reply> {
   }
   if (/\b(index|search) (status|state)\b|\bhow many documents (are |were )?(indexed|searchable)\b|\bis (the )?(search|index) (ready|up to date|working)\b/.test(low)) {
     const st = await api.searchStatus();
-    return { text: `**Search index**\n- Documents indexed: **${st.documents}**\n- ${st.running ? `Scanning now, ${st.pending} left to check` : st.lastEnd ? `Last scan finished ${new Date(st.lastEnd).toLocaleString()}` : 'No scan has finished yet'}\n- Last scan: ${st.indexed} new or changed, ${st.skipped} skipped (no file or unsupported type), ${st.failed} could not be read${st.note ? `\n- Note: ${st.note}` : ''}`, follow: ['Rebuild the search index'] };
+    return { text: `**Search index**\n- Documents indexed: **${st.documents}**\n- ${st.running ? `Scanning now, ${st.pending} left to check` : st.lastEnd ? `Last scan finished ${new Date(st.lastEnd).toLocaleString()}` : 'No scan has finished yet'}\n- Last scan: ${st.indexed} new or changed, ${st.skipped} skipped (no file or unsupported type), ${st.failed} could not be read${st.note ? `\n- Note: ${st.note}` : ''}${st.problems?.length ? `\n\n**Problems found**\n${st.problems.map(x => '- ' + x).join('\n')}` : ''}`, follow: ['Rebuild the search index'] };
   }
   // ---- search inside documents / the manual ----
   const ct = contentTerm(original);

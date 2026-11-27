@@ -9,6 +9,8 @@ public class IndexStatus
 {
     public int Documents { get; set; } public int Pending { get; set; } public bool Running { get; set; } public DateTime? LastStart { get; set; } public DateTime? LastEnd { get; set; }
     public int Indexed { get; set; } public int Skipped { get; set; } public int Failed { get; set; } public string? Note { get; set; }
+    public int Missing { get; set; } public int NoText { get; set; } public int Unsupported { get; set; } public List<string> Problems { get; } = new();
+    public void Problem(string m) { lock (Problems) { if (Problems.Count < 8) Problems.Add(m); } }
 }
 
 /// Full-text index of the document files. Lives in its own SQLite file (SQLite FTS5, BM25 ranking), the SQL Server database stays untouched.

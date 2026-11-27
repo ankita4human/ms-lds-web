@@ -9,6 +9,8 @@ import { IconSliders } from './components/Icons';
 import PageHero from './components/PageHero';
 import Toast from './components/Toast';
 import { Switch } from './components/FormBits';
+import ViewOptions from './components/ViewOptions';
+import './components/progopts.css';
 
 type Panel = null | 'deleted' | 'links' | 'tags' | 'catch' | 'web' | 'frozen';
 type Msg = { ok: boolean; t: string } | null;
@@ -23,22 +25,33 @@ const CARDS: { id: Exclude<Panel, null>; icon: string; title: string; text: stri
 const fmt = (s?: string | null) => s ? new Date(s).toLocaleString() : '';
 const day = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
-/** Options > Program options > Admin tab (manual p. 91-92; legacy "MS LDS-Program-options" window). One card per admin function;
- *  a card opens its panel on this page. Needs the Administrator right (the legacy server checks rightAdmin). */
+type Tab = 'view' | 'server' | 'admin';
+/** Options > Program options (manual p. 33 and 91-92; legacy "MS LDS-Program-options" window): View tab (everybody: font, date, grid columns),
+ *  Server tab (not built) and Admin tab (cards, needs the Administrator right). A card opens its panel on this page. */
 export default function ProgramOptions() {
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
   const nav = useNavigate();
+  const [tab, setTab] = useState<Tab>('view');
   const [panel, setPanel] = useState<Panel>(null);
   const [msg, setMsg] = useState<Msg>(null);
   if (me.isLoading) return <PageLoader label="Loading" />;
-  if (!me.data?.isAdmin) return <div className="um"><div className="card" style={{ padding: 20 }}>Program options are only available to administrators.</div></div>;
+  const admin = !!me.data?.isAdmin;
   const card = CARDS.find(c => c.id === panel);
+  const TABS: { id: Tab; label: string; icon: string }[] = [{ id: 'view', label: 'View', icon: '👁️' }, { id: 'server', label: 'Server', icon: '🖥️' }, { id: 'admin', label: 'Admin', icon: '🛡️' }];
+  const sub = tab === 'admin' ? (card ? card.title : 'Administration of the application') : tab === 'view' ? 'Fonts, date format and grid columns' : 'Server settings';
   return (
     <div className="um">
-      <PageHero icon={<IconSliders />} title="Program options" sub={card ? card.title : 'Administration of the application'} chips={[{ n: 'Admin', label: 'tab' }]} />
+      <PageHero icon={<IconSliders />} title="Program options" sub={sub} chips={[{ n: TABS.find(t => t.id === tab)!.label, label: 'tab' }]} />
       <div className="card" style={{ padding: 16 }}>
-        <div className="po-tabs po-noprint"><span>View</span><span>Server</span><span className="on">Admin</span></div>
-        {!panel && (<>
+        <div className="po-tabs po-noprint" role="tablist">
+          {TABS.map(t => (
+            <button key={t.id} role="tab" aria-selected={tab === t.id} className={tab === t.id ? 'on' : ''} onClick={() => { setTab(t.id); setPanel(null); }}>
+              <span aria-hidden>{t.icon}</span>{t.label}{t.id === 'admin' && !admin && <small title="Administrators only">🔒</small>}</button>))}
+        </div>
+        {tab === 'view' && <ViewOptions onDone={t => setMsg({ ok: true, t })} />}
+        {tab === 'server' && <div className="po-soon"><span aria-hidden>🖥️</span><b>Server settings</b><p>The server settings of the legacy program are managed on the server in the web version (appsettings and environment variables).</p></div>}
+        {tab === 'admin' && !admin && <div className="po-soon"><span aria-hidden>🔒</span><b>Administrators only</b><p>The Admin tab is only available to administrators.</p></div>}
+        {tab === 'admin' && admin && !panel && (<>
           <div className="po-grid">
             {CARDS.map(c => (
               <button key={c.id} className="po-card" onClick={() => setPanel(c.id)}>
@@ -46,8 +59,12 @@ export default function ProgramOptions() {
           </div>
           <div className="modal-foot" style={{ marginTop: 14 }}><button className="btn-ghost" onClick={() => nav('/documents')}>Close</button></div>
         </>)}
-        {panel && (<>
-          <div className="po-bar po-noprint"><button className="btn-ghost" onClick={() => setPanel(null)}>‹ Back to the cards</button><b>{card?.title}</b></div>
+        {tab === 'admin' && admin && panel && (<>
+          <div className="po-crumb po-noprint">
+            <button className="po-back" onClick={() => setPanel(null)} aria-label="Back to the cards"><span className="po-back-arr" aria-hidden>‹</span><span>Back to the cards</span></button>
+            <nav className="po-trail" aria-label="Breadcrumb"><span>Program options</span><i>›</i><span>Admin</span><i>›</i><b>{card?.title}</b></nav>
+            <span className="po-crumb-ico" aria-hidden>{card?.icon}</span>
+          </div>
           {panel === 'deleted' && <DeletedPanel />}
           {panel === 'links' && <LinksPanel />}
           {panel === 'tags' && <TagsPanel setMsg={setMsg} />}

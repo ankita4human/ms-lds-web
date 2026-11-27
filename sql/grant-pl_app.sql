@@ -80,3 +80,7 @@ GO
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.Replacements TO [pl_app];
 GRANT SELECT, INSERT, UPDATE ON dbo.ApplicationLevelTags_History TO [pl_app];
 GRANT SELECT, DELETE ON dbo.WebLog TO [pl_app];
+
+-- Documents > Archives tab (manual p. 21): "Property Changes" log (read by db_datareader, written on rename / version change)
+GRANT INSERT ON dbo.PropertyMods TO [pl_app];
+GO

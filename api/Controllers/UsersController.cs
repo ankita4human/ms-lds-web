@@ -403,6 +403,18 @@ public class UsersController(IConfiguration cfg) : ControllerBase
         return File(Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(sb.ToString())).ToArray(), "text/csv; charset=utf-8", "MS-LDS-User-Rights.csv");
     }
 
+    // ---------- list of users that can be simulated (sidebar "Simulate profile"; needs the right 41 "Simulation" or Admin) ----------
+    [HttpGet("users/simulatable")]
+    public async Task<IActionResult> Simulatable()
+    {
+        await using var con = Con();
+        var mine = await Access.Rights(con, Acc);
+        if (!(Access.IsAdmin(mine) || mine.Any(x => x.RCod == RightSimulation))) return StatusCode(403, new { error = "You do not have the right to simulate users (Simulation)." });
+        var rows = await con.QueryAsync<UserDbRow>(@"SELECT a.IdAcc, a.AccShort, e.Name FROM Accounts a LEFT JOIN EmailContact e ON e.IDEC = a.IDEC
+            WHERE ISNULL(a.IsDeleted, 0) = 0 AND ISNULL(a.AccInactive, 0) = 0 AND a.IdAcc <> @me", new { me = Acc });
+        return Ok(rows.OrderBy(r => r.Name ?? r.AccShort, StringComparer.CurrentCultureIgnoreCase).Select(r => new { id = r.IdAcc, login = r.AccShort, name = r.Name ?? r.AccShort }));
+    }
+
     // ---------- Simulate (button "Simulate", needs the right 41 "Simulation" or Admin) ----------
     [HttpPost("users/{id:int}/simulate")]
     public async Task<IActionResult> Simulate(int id)

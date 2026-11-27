@@ -15,6 +15,21 @@ public class DocConverter(IConfiguration cfg, ILogger<DocConverter> log)
 {
     static readonly TimeSpan Timeout = TimeSpan.FromMinutes(4);
 
+    // Parallel publishing: several documents are converted at the same time. Microsoft Office automation is the fragile part, so only
+    // `Publish:OfficeParallel` (default 1) Office conversions run together; LibreOffice gets its own profile folder per running conversion
+    // (one shared profile would make parallel soffice calls hand over to each other); pdf2htmlEX runs freely.
+    readonly SemaphoreSlim officeGate = new(Math.Clamp(cfg.GetValue("Publish:OfficeParallel", 1), 1, 4));
+    readonly System.Collections.Concurrent.ConcurrentBag<string> profiles = new();
+
+    async Task Office(Action a) { await officeGate.WaitAsync(); try { await Sta(a); } finally { officeGate.Release(); } }
+
+    async Task WithLibre(Func<string, Task> run)
+    {
+        if (!profiles.TryTake(out var dir)) dir = Path.Combine(Path.GetTempPath(), "phaselift-lo-profile-" + Guid.NewGuid().ToString("N")[..8]);
+        try { await run("-env:UserInstallation=file:///" + dir.Replace('\\', '/')); profiles.Add(dir); }   // a clean profile is kept for the next conversion (starts faster)
+        catch { try { if (Directory.Exists(dir)) Directory.Delete(dir, true); } catch { /* temp folder */ } throw; }
+    }
+
     public static DocKind KindOf(string ext) => ext.ToLowerInvariant() switch
     {
         ".doc" or ".docx" or ".docm" or ".dot" or ".dotx" or ".dotm" or ".rtf" => DocKind.Word,
@@ -49,14 +64,14 @@ public class DocConverter(IConfiguration cfg, ILogger<DocConverter> log)
         if (kind == DocKind.Pdf) return file;
         if (OfficeAvailable(kind))
         {
-            try { await Sta(() => OfficePdf(file, kind, pdf)); if (File.Exists(pdf)) return pdf; }
+            try { await Office(() => OfficePdf(file, kind, pdf)); if (File.Exists(pdf)) return pdf; }
             catch (Exception ex) { log.LogWarning(ex, "Office PDF export failed for {File}", file); }
         }
         var so = Soffice();
         if (so is not null)
         {
             var dir = Path.GetDirectoryName(pdf)!;
-            await Run(so, new[] { "--headless", "--norestore", "--convert-to", "pdf", "--outdir", dir, file }, dir, LibreProfile());
+            await WithLibre(prof => Run(so, new[] { "--headless", "--norestore", "--convert-to", "pdf", "--outdir", dir, file }, dir, prof));
             var made = Path.Combine(dir, Path.GetFileNameWithoutExtension(file) + ".pdf");
             if (File.Exists(made)) { if (!string.Equals(made, pdf, StringComparison.OrdinalIgnoreCase)) File.Move(made, pdf, true); return pdf; }
         }
@@ -70,7 +85,7 @@ public class DocConverter(IConfiguration cfg, ILogger<DocConverter> log)
     {
         if (kind is DocKind.Word or DocKind.Excel && OfficeAvailable(kind))
         {
-            try { await Sta(() => OfficeHtml(file, kind, htm)); if (File.Exists(htm)) return true; }
+            try { await Office(() => OfficeHtml(file, kind, htm)); if (File.Exists(htm)) return true; }
             catch (Exception ex) { log.LogWarning(ex, "Office HTML export failed for {File}", file); }
         }
         var exe = (await cfgValue("Pathpdf2htmlEX"))?.Trim();
@@ -85,7 +100,7 @@ public class DocConverter(IConfiguration cfg, ILogger<DocConverter> log)
         if (kind is DocKind.Word or DocKind.Excel && Soffice() is { } so)
         {
             var dir = Path.GetDirectoryName(htm)!;
-            await Run(so, new[] { "--headless", "--norestore", "--convert-to", "html", "--outdir", dir, file }, dir, LibreProfile());
+            await WithLibre(prof => Run(so, new[] { "--headless", "--norestore", "--convert-to", "html", "--outdir", dir, file }, dir, prof));
             var made = Path.Combine(dir, Path.GetFileNameWithoutExtension(file) + ".html");
             if (File.Exists(made)) { File.Move(made, htm, true); return true; }
         }
@@ -154,7 +169,6 @@ public class DocConverter(IConfiguration cfg, ILogger<DocConverter> log)
         }).Unwrap();
     }
 
-    string LibreProfile() => "-env:UserInstallation=file:///" + Path.Combine(Path.GetTempPath(), "phaselift-lo-profile").Replace('\\', '/');
 
     static async Task Run(string exe, string[] args, string workDir, string? extraFirstArg = null)
     {

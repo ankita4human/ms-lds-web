@@ -97,6 +97,8 @@ public class VersionController(IConfiguration cfg, IMemoryCache cache, PublishQu
                     new { v1 = b.V1, v2 = b.V2, v3 = b.V3, now, acc, id, l }, tx);
                 await con.ExecuteAsync("INSERT INTO Mods (IdDoc, Lang, V1, V2, V3, IdAcc, ModDate, ModDesc) VALUES (@id, @l, @v1, @v2, @v3, @acc, @now, @comment)",
                     new { id, l, v1 = b.V1, v2 = b.V2, v3 = b.V3, acc, now, comment }, tx);
+                // Archives tab > Property Changes (legacy table PropertyMods): old and new version with the reason
+                await PropMods.Log(con, (SqlTransaction)tx, id, l, b.V1, b.V2, b.V3, acc, "Change Version", $"{old.V1 ?? 0}.{old.V2 ?? 0}.{old.V3 ?? 0}", version, comment);
             }
             await tx.CommitAsync();
             // manual p. 128: a published document is published again so the new version number shows on the intranet

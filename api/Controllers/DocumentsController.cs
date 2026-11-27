@@ -91,6 +91,7 @@ LEFT JOIN Accounts rel ON rel.IdAcc = d.IdRel";
             : SortColumns.GetValueOrDefault(sort, "d.DateMod");
         var acc = int.Parse(User.FindFirstValue("idAcc")!);
 
+        var sw = System.Diagnostics.Stopwatch.StartNew(); long tScope = 0, tRows = 0, tCount = 0;
         await using var con = new SqlConnection(cfg.GetConnectionString("Lds"));
 
         // Group filter: selected group plus all sub-groups, limited to groups this user may access.
@@ -105,7 +106,10 @@ LEFT JOIN Accounts rel ON rel.IdAcc = d.IdRel";
             gids = set.ToArray();
         }
 
-        var vis = await Access.VisibleSql(con, acc, lang);
+        // With a folder selected the group list was already cut down to the groups this user may see, so the second
+        // visibility test (another huge IN list for non-admins) is redundant and is left out.
+        var vis = gids is not null ? "(1 = 1)" : await Access.VisibleSql(con, acc, lang);
+        tScope = sw.ElapsedMilliseconds;
         var where = "WHERE ISNULL(d.LAIgnore, 0) = 0 AND " + vis
             + (string.IsNullOrWhiteSpace(lang) ? "" : " AND d.Lang = @lang")
             + (string.IsNullOrWhiteSpace(text) ? "" : " AND (d.DocName LIKE @text ESCAPE '\\' OR CAST(d.IDDoc AS nvarchar(20)) = @raw)")
@@ -139,13 +143,58 @@ LEFT JOIN Accounts rel ON rel.IdAcc = d.IdRel";
         var countJoins = (string.IsNullOrWhiteSpace(creator) ? "" : " LEFT JOIN Accounts cre ON cre.IdAcc = d.IdCre")
             + (string.IsNullOrWhiteSpace(publisher) ? "" : " LEFT JOIN Accounts pub ON pub.IdAcc = d.IdPub")
             + (string.IsNullOrWhiteSpace(releaser) ? "" : " LEFT JOIN Accounts rel ON rel.IdAcc = d.IdRel");
-        var total = await con.ExecuteScalarAsync<int>($"{AccessCte} SELECT COUNT(*) FROM Documents d {countJoins} {where} OPTION (MAXRECURSION 100)", p);
-        var items = await con.QueryAsync<DocumentRow>($@"{AccessCte}
+        var dir = desc ? "DESC" : "ASC"; sw.Restart();
+        // Fast path: sort and filter on the Documents table alone, cut the page FIRST, and only then look up status, type and
+        // account names for those (at most 200) rows. The old statement joined and sorted everything before taking the page.
+        var simple = filterId is null && countJoins.Length == 0 && sort is not ("type" or "status" or "creator");
+        IEnumerable<DocumentRow> items;
+        if (simple)
+        {
+            items = await con.QueryAsync<DocumentRow>($@"
+SELECT d.IDDoc, d.DocName, d.Lang, d.LangStandard, d.[Status],
+       ISNULL(s.StatusDesc, CASE d.[Status] WHEN 11 THEN 'Frozen' ELSE CONCAT('Status ', d.[Status]) END) AS StatusName, d.[Type],
+       REPLACE(ISNULL(t.TypeDesc, CONCAT('Type ', d.[Type])), '<DE>', '') AS TypeName,
+       d.V1, d.V2, d.V3, d.Extension, d.DateCre, d.DateMod, d.DateExp, d.DatePub, d.DateRel, CAST(ISNULL(d.DoNotExpire, 0) AS bit) AS DoNotExpire, CAST(ISNULL(d.IsCycle, 0) AS bit) AS IsCycle, CAST(ISNULL(d.DoNotPublish, 0) AS bit) AS DoNotPublish,
+       cre.AccShort AS Creator, pub.AccShort AS Publisher, rel.AccShort AS Releaser
+FROM (SELECT d.IDDoc, d.DocName, d.Lang, d.LangStandard, d.[Status], d.[Type], d.V1, d.V2, d.V3, d.Extension, d.DateCre, d.DateMod, d.DateExp, d.DatePub, d.DateRel,
+             d.DoNotExpire, d.IsCycle, d.DoNotPublish, d.IdCre, d.IdPub, d.IdRel
+      FROM Documents d {where}
+      ORDER BY {col} {dir}, d.IDDoc
+      OFFSET @skip ROWS FETCH NEXT @take ROWS ONLY) d
+OUTER APPLY (SELECT TOP 1 StatusDesc FROM [Status] WHERE IDStatus = d.[Status] AND Lang = d.Lang) s
+OUTER APPLY (SELECT TOP 1 TypeDesc FROM DocTypes WHERE IDType = d.[Type] AND Lang = d.Lang) t
+LEFT JOIN Accounts cre ON cre.IdAcc = d.IdCre
+LEFT JOIN Accounts pub ON pub.IdAcc = d.IdPub
+LEFT JOIN Accounts rel ON rel.IdAcc = d.IdRel
+ORDER BY {col} {dir}, d.IDDoc
+OPTION (MAXRECURSION 100)", p);
+        }
+        else
+        {
+            items = await con.QueryAsync<DocumentRow>($@"{AccessCte}
             {SelectColumns} {where}
-            ORDER BY {col} {(desc ? "DESC" : "ASC")}, d.IDDoc
+            ORDER BY {col} {dir}, d.IDDoc
             OFFSET @skip ROWS FETCH NEXT @take ROWS ONLY
             OPTION (MAXRECURSION 100)", p);
-        var rows = items.ToList();
+        }
+        var rows = items.ToList(); tRows = sw.ElapsedMilliseconds; sw.Restart();
+        // The count is only needed when the page is full (or empty beyond page 1): a short page tells the total by itself.
+        int total;
+        if (rows.Count < pageSize && (rows.Count > 0 || page == 1)) total = (page - 1) * pageSize + rows.Count;
+        else
+        {
+            var countSql = $"{AccessCte} SELECT COUNT(*) FROM Documents d {countJoins} {where} OPTION (MAXRECURSION 100)";
+            // The same question is asked again for every page and every revisit: remember the answer for a short time.
+            // (Not for saved filters: their parameters are not part of the key.)
+            total = filterId is not null ? await con.ExecuteScalarAsync<int>(countSql, p)
+                : await Access.Cached($"cnt:{GroupCache.TreeKey(0, "")}:{countSql.GetHashCode()}:{lang}:{type}:{status}:{p0.raw}:{creator}:{publisher}:{releaser}", TimeSpan.FromSeconds(20),
+                    () => con.ExecuteScalarAsync<int>(countSql, p));
+        }
+        tCount = sw.ElapsedMilliseconds;
+        var totalMs = tScope + tRows + tCount;
+        Response.Headers["Server-Timing"] = $"scope;dur={tScope}, rows;dur={tRows}, count;dur={tCount}";
+        if (totalMs > 700) HttpContext.RequestServices.GetService<ILoggerFactory>()?.CreateLogger("DocList")
+            .LogWarning("Slow document list {Ms} ms (scope {S}, rows {R}, count {C}); lang={Lang} group={G} direct={D} filter={F} sort={Sort}; groups in filter={N}", totalMs, tScope, tRows, tCount, lang, groupId, direct, filterId, sort, gids?.Length);
         if (withPaths && rows.Count > 0)
         {
             var all = await Access.Groups(con, string.IsNullOrWhiteSpace(lang) ? "EN" : lang);
@@ -164,7 +213,7 @@ LEFT JOIN Accounts rel ON rel.IdAcc = d.IdRel";
                 }
             }
         }
-        return Ok(new { total, page, pageSize, items = rows });
+        return Ok(new { total, page, pageSize, items = rows, ms = totalMs });
     }
 
     [HttpGet("{id:int}")]

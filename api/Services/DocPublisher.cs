@@ -45,7 +45,9 @@ class RepRow
 public class DocPublisher(IConfiguration cfg, DocConverter conv, ILogger<DocPublisher> log)
 {
     const int StPublished = 3, StReleased = 8;
-    static readonly SemaphoreSlim Gate = new(1, 1);           // Office / LibreOffice conversions run one at a time
+    // Publishing runs in parallel (PublishWorker, Publish:MaxParallel). The languages of ONE document are still published one after the other,
+    // so the rule "the original language is published first" keeps working. Office conversions are limited inside DocConverter.
+    static readonly System.Collections.Concurrent.ConcurrentDictionary<int, SemaphoreSlim> DocLocks = new();
     static readonly Regex Ident = new(@"^[A-Za-z_][A-Za-z0-9_]*$", RegexOptions.Compiled);
 
     SqlConnection Con() => new(cfg.GetConnectionString("Lds"));
@@ -53,9 +55,10 @@ public class DocPublisher(IConfiguration cfg, DocConverter conv, ILogger<DocPubl
     public async Task<PublishResult> Publish(int id, string lang, int acc)
     {
         lang = (lang ?? "").Trim().ToUpperInvariant();
-        if (!await Gate.WaitAsync(TimeSpan.FromMinutes(6))) throw new PublishException(503, "Another publish is still running on the server. Please try again in a minute.");
+        var gate = DocLocks.GetOrAdd(id, _ => new SemaphoreSlim(1, 1));
+        if (!await gate.WaitAsync(TimeSpan.FromMinutes(10))) throw new PublishException(503, "Another language of this document is still being published. Please try again in a minute.");
         try { return await Run(id, lang, acc); }
-        finally { Gate.Release(); }
+        finally { gate.Release(); }
     }
 
     async Task<PublishResult> Run(int id, string lang, int acc)

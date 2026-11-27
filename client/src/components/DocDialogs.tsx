@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import './blockdlg.css';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, type DocRow, type GroupNode } from '../api';
 import ConfirmDialog from './ConfirmDialog';
@@ -234,14 +235,25 @@ export function BlockDialog({ doc, lang, onClose, onDone }: {
       onDone(unblock ? `Document ${doc.idDoc} is unblocked and back in Edit status.` : `Document ${doc.idDoc} is blocked in all languages.`, true);
     } catch (e) { onDone(errText(e), false); }
   }
+  const chips = unblock ? ['Issue solved', 'Blocked by mistake', 'Review finished'] : ['Outdated content', 'Under legal review', 'Wrong version published', 'Error found'];
   return (
-    <Modal title={unblock ? 'Unblock document' : 'Block document'} sub={`#${doc.idDoc} ${doc.docName}`} busy={busy} onClose={onClose}
+    <Modal title={unblock ? 'Unblock document' : 'Block document'} busy={busy} onClose={onClose}
       foot={<><button className="btn-ghost" onClick={onClose} disabled={busy}>Cancel</button>
-        <button className={unblock ? 'btn-primary' : 'btn-primary danger'} style={{ width: 'auto' }} onClick={go} disabled={busy}>{busy ? <Spinner /> : unblock ? '🔓 Unblock' : '⛔ Block'}</button></>}>
-      <div style={{ padding: '4px 18px 14px', display: 'grid', gap: 8 }}>
-        <div className="mh">{unblock ? 'The document goes back to Edit status in all languages and must be released again.' : 'Blocked documents cannot be used in MS LDS or on the web: users see “Document is blocked. Please contact Administrator.” The block applies to all languages.'}</div>
-        <label className="fm-row" style={{ display: 'grid', gap: 4 }}>{unblock ? 'Comment (optional)' : 'Reason to block'}
-          <textarea rows={3} maxLength={450} value={reason} autoFocus onChange={e => setReason(e.target.value)} placeholder="Why is this document blocked?" /></label>
+        <button className={`blk-go ${unblock ? 'ok' : 'bad'}`} onClick={go} disabled={busy}>{busy ? <Spinner /> : unblock ? '🔓 Unblock document' : '⛔ Block document'}</button></>}>
+      <div className={`blk ${unblock ? 'ok' : 'bad'}`}>
+        <div className="blk-hero">
+          <div className="blk-ico" aria-hidden>{unblock ? '🔓' : '⛔'}</div>
+          <div className="blk-doc"><b title={doc.docName}>{doc.docName}</b><small>#{doc.idDoc} · {doc.typeName} · v{doc.v1}.{doc.v2}.{doc.v3}</small></div>
+        </div>
+        <div className="blk-note">
+          {unblock
+            ? <>The document goes back to <b>Edit</b> status in all languages and must be released again.</>
+            : <>Blocked documents cannot be used in MS LDS or on the web. Users see <i>“Document is blocked. Please contact Administrator.”</i> The block applies to <b>all languages</b>.</>}
+        </div>
+        <label className="blk-lab" htmlFor="blk-reason">{unblock ? 'Comment (optional)' : 'Reason to block'}</label>
+        <div className="blk-chips">{chips.map(c => <button type="button" key={c} onClick={() => setReason(c)} className={reason === c ? 'on' : ''}>{c}</button>)}</div>
+        <textarea id="blk-reason" rows={3} maxLength={450} value={reason} autoFocus onChange={e => setReason(e.target.value)} placeholder={unblock ? 'Add a short comment…' : 'Why is this document blocked?'} />
+        <div className="blk-count">{reason.length} / 450</div>
       </div>
     </Modal>
   );

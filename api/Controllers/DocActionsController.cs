@@ -254,6 +254,8 @@ public class DocActionsController(IConfiguration cfg, IMemoryCache cache, Publis
         try
         {
             await con.ExecuteAsync("UPDATE Documents SET DocName = @name" + (nn is null ? "" : ", DocNewName = @nn") + " WHERE IDDoc = @id AND Lang = @lg", new { id, lg, name, nn });
+            if (!string.Equals(row.DocName, name, StringComparison.Ordinal))
+                await PropMods.Log(con, null, id, lg, row.V1, row.V2, row.V3, Acc, "Name", row.DocName, name, "Document renamed (web)", log);
         }
         catch (SqlException e) when (SqlErr(e) is { } r) { return r; }
         object? job = null;

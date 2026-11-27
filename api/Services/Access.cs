@@ -1,5 +1,7 @@
 using Dapper;
 using Microsoft.Data.SqlClient;
+using Microsoft.Extensions.Caching.Memory;
+using PhaseLift.Api.Controllers;
 
 namespace PhaseLift.Api;
 
@@ -11,17 +13,33 @@ public static class Access
     public const int RightAdmin = 1, RightAllGroups = 20, RightSingleGroup = 21;
 
     /// Rights granted to the account directly or through an account group (same source as legacy AccountFactory.hasRight).
-    public static async Task<List<RightRow>> Rights(SqlConnection con, int acc) =>
-        (await con.QueryAsync<RightRow>(@"SELECT RCod, RValue FROM AccountsRights
-            WHERE IDAccount = @acc OR IDAccGroup IN (SELECT IdAccGroup FROM AccountAccGrp WHERE IdAcc = @acc)", new { acc })).ToList();
+    // Short-lived cache: every list, tree level and count request used to re-read the whole group table and the rights.
+    // Group edits made in the web app bump GroupCache (new key); rights are re-read at least every 15 seconds.
+    static readonly MemoryCache Cache = new(new MemoryCacheOptions { SizeLimit = 2000 });
+    public static async Task<T> Cached<T>(string key, TimeSpan ttl, Func<Task<T>> load)
+    {
+        if (Cache.TryGetValue(key, out T? v) && v is not null) return v;
+        var r = await load();
+        Cache.Set(key, r, new MemoryCacheEntryOptions { AbsoluteExpirationRelativeToNow = ttl, Size = 1 });
+        return r;
+    }
+
+    public static Task<List<RightRow>> Rights(SqlConnection con, int acc) =>
+        Cached($"rights:{acc}", TimeSpan.FromSeconds(15), async () =>
+            (await con.QueryAsync<RightRow>(@"SELECT RCod, RValue FROM AccountsRights
+                WHERE IDAccount = @acc OR IDAccGroup IN (SELECT IdAccGroup FROM AccountAccGrp WHERE IdAcc = @acc)", new { acc })).ToList());
 
     /// Visibility scope for SQL: (1, none) = every group, otherwise (0, ids of accessible groups).
     /// Computed once in C# so SQL no longer re-evaluates a recursive group tree for every document row.
-    public static async Task<(int All, int[] Gids)> Scope(SqlConnection con, int acc, string? lang)
+    public static Task<(int All, int[] Gids)> Scope(SqlConnection con, int acc, string? lang)
     {
-        var all = await Groups(con, string.IsNullOrWhiteSpace(lang) ? "EN" : lang);
-        var accessible = AccessibleGroups(all, await Rights(con, acc));
-        return accessible is null ? (1, Array.Empty<int>()) : (0, accessible.ToArray());
+        var l = string.IsNullOrWhiteSpace(lang) ? "EN" : lang;
+        return Cached($"scope:{acc}:{l}:{GroupCache.TreeKey(0, "")}", TimeSpan.FromSeconds(15), async () =>
+        {
+            var all = await Groups(con, l);
+            var accessible = AccessibleGroups(all, await Rights(con, acc));
+            return accessible is null ? (1, Array.Empty<int>()) : (0, accessible.ToArray());
+        });
     }
 
     /// SQL condition "this document is in a group the user may access". Group ids are plain integers, so they are
@@ -37,9 +55,10 @@ public static class Access
     public static bool IsAdmin(IEnumerable<RightRow> r) => r.Any(x => x.RCod == RightAdmin);
     public static bool SeesAllGroups(IEnumerable<RightRow> r) => r.Any(x => x.RCod == RightAdmin || x.RCod == RightAllGroups);
 
-    public static async Task<List<GroupRow>> Groups(SqlConnection con, string lang) =>
-        (await con.QueryAsync<GroupRow>(@"SELECT IDGroup, ISNULL(IDParent, 0) AS IDParent, GroupDesc, ISNULL(SortG, 0) AS SortG, ISNULL(GroupType, 0) AS GroupType
-            FROM Groups WHERE Lang = @lang AND IDGroup IS NOT NULL", new { lang })).ToList();
+    public static Task<List<GroupRow>> Groups(SqlConnection con, string lang) =>
+        Cached($"groups:{lang}:{GroupCache.TreeKey(0, "")}", TimeSpan.FromSeconds(60), async () =>
+            (await con.QueryAsync<GroupRow>(@"SELECT IDGroup, ISNULL(IDParent, 0) AS IDParent, GroupDesc, ISNULL(SortG, 0) AS SortG, ISNULL(GroupType, 0) AS GroupType
+                FROM Groups WHERE Lang = @lang AND IDGroup IS NOT NULL", new { lang })).ToList());
 
     public static HashSet<int> Descendants(List<GroupRow> all, IEnumerable<int> roots)
     {

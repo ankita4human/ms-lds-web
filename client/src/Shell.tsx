@@ -5,10 +5,13 @@ import { api, auth, simulation } from './api';
 import { useLang } from './LangContext';
 import { TopProgress } from './components/Loader';
 import ChatBot from './components/ChatBot';
+import ActivityTray from './components/ActivityTray';
 import NotificationBell from './components/NotificationBell';
 import ThemeSwitch from './components/ThemeSwitch';
 import SkinSwitch from './components/SkinSwitch';
 import UserAvatar, { AvatarEditor } from './components/UserAvatar';
+import SimulateDialog from './components/SimulateDialog';
+import ViewStyle from './components/ViewStyle';
 import { IconChart, IconDash, IconDocs, IconFilter, IconGear, IconType, IconUsers, IconMail, IconLogout, IconSearch, IconStd, IconDep, IconFlow, IconTask, IconCatch, IconTag, IconSliders, IconSpark } from './components/Icons';
 
 const TITLES: Record<string, string> = { '/assistant': 'AI Assistant', '/tasks': 'My tasks', '/options/workflows': 'Workflow management', '/options/catch': 'Catch management', '/options/tags': 'Tags', '/options/program': 'Program options', '/': 'Dashboard', '/analytics': 'Analytics', '/documents': 'Documents' };
@@ -26,6 +29,7 @@ export default function Shell() {
   const openTasks = wfCount.data?.total ?? 0;
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem(KEY) === '1');
   const [menuOpen, setMenuOpen] = useState(false);
+  const [simOpen, setSimOpen] = useState(false);
   const [optOpen, setOptOpen] = useState(() => location.pathname.startsWith('/options'));
   const menuRef = useRef<HTMLDivElement>(null);
   const [q, setQ] = useState('');
@@ -64,7 +68,9 @@ export default function Shell() {
           {optOpen && wfCfg.data?.canManage && <NavLink className="sub" to="/options/workflows" title="Workflow management"><IconFlow /><span className="txt">Workflow management</span></NavLink>}
           {optOpen && catchCfg.data?.canManage && <NavLink className="sub" to="/options/catch" title="Catch management"><IconCatch /><span className="txt">Catch management</span></NavLink>}
           {optOpen && <NavLink className="sub" to="/options/tags" title="Tags"><IconTag /><span className="txt">Tags</span></NavLink>}
-          {optOpen && me.data?.isAdmin && <NavLink className="sub" to="/options/program" title="Program options"><IconSliders /><span className="txt">Program options</span></NavLink>}
+          {optOpen && <NavLink className="sub" to="/options/program" title="Program options"><IconSliders /><span className="txt">Program options</span></NavLink>}
+          {optOpen && (me.data?.isAdmin || me.data?.rights.includes(41)) && !simulation.active() && (
+            <button className="nav-sub-sim" onClick={() => setSimOpen(true)} title="Simulate profile: work as another user"><span className="sim-emo" aria-hidden>🎭</span><span className="txt">Simulate profile</span></button>)}
           {optOpen && <NavLink className="sub" to="/options/dependency" title="Dependency"><IconDep /><span className="txt">Dependency</span></NavLink>}
           {optOpen && <NavLink className="sub" to="/options/users" title="User management"><IconUsers /><span className="txt">User management</span></NavLink>}
           {optOpen && <NavLink className="sub" to="/options/distribution" title="E-mail distribution"><IconMail /><span className="txt">E-mail distribution</span></NavLink>}
@@ -110,8 +116,11 @@ export default function Shell() {
           </div>
         </header>
         <div className="content"><Outlet /></div>
+        <ActivityTray />
         <ChatBot />
       </div>
+      {simOpen && <SimulateDialog onClose={() => setSimOpen(false)} />}
+      <ViewStyle />
     </div>
   );
 }

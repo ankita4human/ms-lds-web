@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent as RMouseEvent } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
-import { api, type DocRow, type GroupNode } from './api';
+import { api, downloadDocFile, previewDocFile, type DocRow, type GroupNode } from './api';
+import { track } from './activity';
 import { useLang } from './LangContext';
 import { useGroupTree } from './useGroupTree';
 import GroupTreeView, { type NodeSel, type GroupMenuKey } from './components/GroupTree';
@@ -9,7 +10,8 @@ import GroupAdmin, { type GroupAction } from './components/GroupAdmin';
 import { allFilterDocs, downloadCsv, filterCsvRows, printFilterReport, printGroupReport, safeFile } from './printing';
 import ContextMenu, { type MenuItem } from './components/ContextMenu';
 import DocDetail from './components/DocDetail';
-import { ExtBadge, StatusBadge, fmtDate, version } from './components/bits';
+import { ExtBadge, StatusBadge, version } from './components/bits';
+import { useViewPrefs, fmtStamp } from './viewPrefs';
 import { IconSearch } from './components/Icons';
 import { PageLoader, SkeletonRows } from './components/Loader';
 import UploadDialog from './components/UploadDialog';
@@ -26,6 +28,7 @@ import Toast, { type ToastMsg } from './components/Toast';
 // rights: 38 Edit, 34 New, 33 Delete, 18 Verify, 36 Release, 19 Publish, 40 Workflow, 35 Archive, 1 Admin.
 const MENU: { key: string; label: string; icon: string; right?: number; sepBefore?: boolean; live?: boolean }[] = [
   { key: 'view', label: 'View', icon: '👁', live: true },
+  { key: 'download', label: 'Download', icon: '📥', live: true },
   { key: 'edit', label: 'Edit document', icon: '✏️', right: 38 },
   { key: 'checkout', label: 'Check out', icon: '⬇️', right: 38 },
   { key: 'checkin', label: 'Check in', icon: '⬆️', right: 38 },
@@ -42,7 +45,8 @@ const MENU: { key: string; label: string; icon: string; right?: number; sepBefor
   { key: 'relpub', label: 'Release / Publish', icon: '⚡', right: 19 },
   { key: 'workflow', label: 'Workflow', icon: '🔀', right: 40 },
   { key: 'wfremove', label: 'Remove from workflow', icon: '🚫', right: 40 },
-  { key: 'preview', label: 'Web preview', icon: '🌐', live: false },
+  { key: 'preview', label: 'Web preview', icon: '🌐', live: true },
+  { key: 'webdl', label: 'Download HTML version', icon: '🧾', live: true },
   { key: 'noweb', label: "Don't view in web", icon: '🙈', right: 38 },
   { key: 'block', label: 'Block', icon: '⛔', right: 37 },
   { key: 'expiry', label: 'Expiry / Do not expire', icon: '⏳', right: 37, sepBefore: true },
@@ -94,6 +98,16 @@ export default function Documents() {
 
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
   const tree = useGroupTree(lang);   // main groups first, lower levels and document counts stream in
+  // Rest the pointer on a folder for a moment and its first page is fetched in the background: the click then shows it at once.
+  const hoverT = useRef<ReturnType<typeof setTimeout>>();
+  function hoverGroup(id: number | null) {
+    clearTimeout(hoverT.current);
+    if (id === null || !lang || fid || id === sel) return;
+    hoverT.current = setTimeout(() => {
+      void qc.prefetchQuery({ queryKey: ['docs', lang, id, false, null, 1, dText, sort, desc], staleTime: 60_000,
+        queryFn: () => api.documents({ page: 1, pageSize, text: dText, sort, desc, lang, groupId: id, direct: true }) });
+    }, 140);
+  }
   const list = useQuery({
     queryKey: ['docs', lang, sel, subs, fid, page, dText, sort, desc], enabled: !!lang && (sel !== 'none' || !!fid || !!dText), placeholderData: keepPreviousData,
     queryFn: () => api.documents({ page, pageSize, text: dText, sort, desc, lang,
@@ -128,6 +142,7 @@ export default function Documents() {
     if (handled.current === tag) return;   // run once per navigation, not on every refetch
     handled.current = tag;
     setCurrent(d.doc);
+    if (params.get('act') === 'edit') { if (hasRight(38)) setEditDoc(d.doc); else setMsg({ ok: false, t: 'You do not have the right to edit documents.' }); }
     const gid = d.groupIds?.[0], groups = tree.data?.groups;
     if (gid && groups) {
       const byId = new Map(groups.map(g => [g.idGroup, g]));
@@ -158,7 +173,7 @@ export default function Documents() {
     if (!d) return true;
     if (key === 'wfremove') return !!d.isCycle;
     if (key === 'block') return d.status === 9 || (!d.isCycle && d.status !== 11);   // a document in a workflow cannot be blocked (manual p. 127)
-    if (d.status === 9 && key !== 'block' && key !== 'noweb' && key !== 'view' && key !== 'print' && key !== 'weblink' && key !== 'copy' && key !== 'assign' && key !== 'delete' && key !== 'new' && key !== 'expiry') return false;   // Blocked: only unblock and admin actions
+    if (d.status === 9 && key !== 'block' && key !== 'noweb' && key !== 'view' && key !== 'download' && key !== 'preview' && key !== 'webdl' && key !== 'print' && key !== 'weblink' && key !== 'copy' && key !== 'assign' && key !== 'delete' && key !== 'new' && key !== 'expiry') return false;   // Blocked: only unblock and admin actions
     if (d.status === 11) return key === 'defreeze' || !FROZEN_OFF.includes(key);   // Frozen: no change except Defrozen (manual p. 163)
     if (key === 'defreeze') return false;
     if (key === 'freeze') return d.status === 3 || d.status === 6 || d.status === 8;
@@ -198,7 +213,9 @@ export default function Documents() {
   const [sideW, setSideW] = useState<number>(() => lsGet('pl_side_w', 320));
   const [colW, setColW] = useState<Record<string, number>>(() => lsGet('pl_doc_cols', {}));
   const wOf = (k: string) => colW[k] ?? COLS.find(c => c.k === k)!.w;
-  const tableW = COLS.reduce((a, c) => a + wOf(c.k), 0);
+  const vp = useViewPrefs();   // Program options > View: hidden columns, date format
+  const shownCols = COLS.filter(c => c.k === 'sel' || !vp.hidden.includes(c.k));
+  const tableW = shownCols.reduce((a, c) => a + wOf(c.k), 0);
   function drag(e: React.MouseEvent, start: number, min: number, max: number, apply: (w: number) => void, done: (w: number) => void) {
     e.preventDefault(); e.stopPropagation();
     const x0 = e.clientX; let w = start;
@@ -265,7 +282,19 @@ export default function Documents() {
   function pick(key: string, doc: DocRow) {
     if (key === 'bulk-freeze' || key === 'bulk-defreeze') { setBulkFrz(key === 'bulk-freeze' ? 'freeze' : 'defreeze'); return; }
     if (key.startsWith('bulk-')) { setBulk(key.slice(5) as BulkKind); return; }
-    if (key === 'view') setCurrent(doc);
+    if (key === 'view' || key === 'preview') {
+      // opens the document in a new tab (PDF / picture as they are, Office and text as an HTML page); the details panel opens too
+      if (key === 'view') setCurrent(doc);
+      track('view', doc, lang);
+      previewDocFile(doc.idDoc, lang, { html: key === 'preview' }).catch(e => setMsg({ ok: false, t: (e as Error).message }));
+    }
+    else if (key === 'download') {
+      downloadDocFile(doc.idDoc, lang, `${doc.docName}${doc.extension ? (doc.extension.startsWith('.') ? doc.extension : '.' + doc.extension) : ''}`)
+        .then(() => { track('download', doc, lang); flash('Downloaded: ' + doc.docName); }, e => setMsg({ ok: false, t: (e as Error).message }));
+    }
+    else if (key === 'webdl') {
+      previewDocFile(doc.idDoc, lang, { html: true, download: true }).then(() => { track('download', doc, lang); flash('HTML version saved'); }, e => setMsg({ ok: false, t: (e as Error).message }));
+    }
     else if (key === 'new') setUploadOpen(true);
     else if (key === 'edit' || key === 'checkout' || key === 'checkin') setEditDoc(doc);
     else if (key === 'verify' || key === 'release' || key === 'publish' || key === 'relpub') {
@@ -289,7 +318,7 @@ export default function Documents() {
     else if (key === 'noweb') {
       api.noWebDoc(doc.idDoc, lang, !doc.doNotPublish).then(r => { flash(r.hidden ? 'The document is no longer shown on the web.' : 'The document is shown on the web again.'); void list.refetch(); }, e => setMsg({ ok: false, t: (e as Error).message }));
     }
-    else if (key === 'copy' || key === 'assign' || key === 'rename' || key === 'delete' || key === 'stdlink' || key === 'expiry' || key === 'freeze' || key === 'defreeze' || key === 'workflow' || key === 'wfremove') setDocAct({ kind: key, doc });
+    else if (key === 'copy' || key === 'assign' || key === 'rename' || key === 'delete' || key === 'block' || key === 'stdlink' || key === 'expiry' || key === 'freeze' || key === 'defreeze' || key === 'workflow' || key === 'wfremove') setDocAct({ kind: key, doc });
     else flash('This action is not available.');
   }
   const head = (label: string, key: string, ck: string) => (
@@ -301,7 +330,7 @@ export default function Documents() {
     <div className="docs" style={{ ['--side-w' as string]: `${sideW}px` }}>
       <div className="docs-side">
         <GroupTreeView groups={tree.data?.groups ?? []} total={tree.data?.total ?? 0} expired={tree.data?.expired ?? 0}
-          sel={fid ? -1 : sel} onSel={(s, all) => { setFid(null); setSubs(!!all); setSel(s); }} rootLabel={`${lang} Document structure`} countsLoading={tree.countsLoading} reveal={reveal}
+          sel={fid ? -1 : sel} onSel={(s, all) => { setFid(null); setSubs(!!all); setPage(1); setSel(s); }} onHover={hoverGroup} rootLabel={`${lang} Document structure`} countsLoading={tree.countsLoading} reveal={reveal}
           isAdmin={!!me.data?.isAdmin} canCreateRoot={!!tree.data?.canCreateRoot} templateGroup={tree.data?.templateGroup} onAction={groupAction} />
         <div className="card flt-card">
           <div className="tree-title"><span>Filters</span><a href="/options/filters" onClick={e => { e.preventDefault(); nav('/options/filters'); }} style={{ fontSize: 12 }}>Manage</a></div>
@@ -350,35 +379,38 @@ export default function Documents() {
         <div className="card table-wrap" style={{ padding: 0 }}>
           {list.isFetching && !list.isLoading && <div className="fetch-veil"><PageLoader compact label="Loading documents" /></div>}
           <table className="grid-table docs-table" style={{ width: Math.max(tableW, 0), minWidth: '100%' }}>
-            <colgroup>{COLS.map(c => <col key={c.k} style={{ width: wOf(c.k) }} />)}</colgroup>
+            <colgroup>{shownCols.map(c => <col key={c.k} style={{ width: wOf(c.k) }} />)}</colgroup>
             <thead><tr><th className="sel-col"><input type="checkbox" checked={allOnPage} onChange={togglePage} aria-label="Select all documents on this page" title="Select all on this page" /></th>{head('ID', 'id', 'id')}{head('Document', 'name', 'name')}{head('Status', 'status', 'status')}{head('Type', 'type', 'type')}<th>Version{grip('ver')}</th><th>App{grip('app')}</th>
               <th>Std. lang{grip('lang')}</th>{head('Created', 'created', 'created')}{head('Creator', 'creator', 'creator')}{head('Published', 'published', 'pub')}<th>Publisher{grip('publisher')}</th>{head('Released', 'released', 'rel')}{head('Expires', 'expires', 'exp')}</tr></thead>
             <tbody>
-              {(list.isLoading || !lang) && <SkeletonRows rows={10} cols={14} />}
-              {sel === 'none' && !fid && !dText && <tr><td colSpan={14} style={{ textAlign: 'center', padding: '48px 16px', color: 'var(--muted)' }}>📁 Click a folder in the structure on the left to show its documents and sub-groups.<br /><small>Right-click a folder and choose “View all documents” to include its sub-groups.</small></td></tr>}
+              {(list.isLoading || !lang) && <SkeletonRows rows={10} cols={shownCols.length} />}
+              {sel === 'none' && !fid && !dText && <tr><td colSpan={shownCols.length} style={{ textAlign: 'center', padding: '48px 16px', color: 'var(--muted)' }}>📁 Click a folder in the structure on the left to show its documents and sub-groups.<br /><small>Right-click a folder and choose “View all documents” to include its sub-groups.</small></td></tr>}
               {list.data?.items.map(d => (
                 <tr key={d.idDoc} id={`doc-row-${d.idDoc}`} className={`${current?.idDoc === d.idDoc ? 'sel' : ''} ${checked.has(d.idDoc) ? 'chk' : ''} ${hiId === d.idDoc ? 'flash' : ''}`} onClick={e => rowClick(e, d)}
                   onContextMenu={e => { e.preventDefault(); if (checked.size > 1 && checked.has(d.idDoc)) { setMenu({ x: e.clientX, y: e.clientY, doc: d, bulk: true }); return; } setCurrent(d); setMenu({ x: e.clientX, y: e.clientY, doc: d }); }}>
                   <td className="sel-col" onClick={e => e.stopPropagation()}><input type="checkbox" checked={checked.has(d.idDoc)} onChange={() => { toggleOne(d); lastClick.current = d.idDoc; }} aria-label={`Select ${d.docName}`} /></td>
-                  <td>{d.idDoc}</td><td title={d.docName}><b>{d.docName}</b></td><td><StatusBadge id={d.status} name={d.statusName} /></td>
+                  <td>{d.idDoc}</td><td title={d.docName}>{d.doNotPublish && <span className="noweb-ico" title="Not shown on the web (Don't view in web)" aria-label="Not shown on the web" />}<b>{d.docName}</b></td><td><StatusBadge id={d.status} name={d.statusName} /></td>
                   <td>{d.typeName}</td><td>{version(d)}</td><td><ExtBadge ext={d.extension} /></td><td>{d.langStandard}</td>
-                  <td>{fmtDate(d.dateCre)}</td><td>{d.creator}</td><td>{fmtDate(d.datePub)}</td><td>{d.publisher}</td>
-                  <td>{fmtDate(d.dateRel)}</td><td>{fmtDate(d.dateExp)}</td>
+                  <td>{fmtStamp(d.dateCre, vp.dateOnly)}</td><td>{d.creator}</td><td>{fmtStamp(d.datePub, vp.dateOnly)}</td><td>{d.publisher}</td>
+                  <td>{fmtStamp(d.dateRel, vp.dateOnly)}</td><td>{fmtStamp(d.dateExp, vp.dateOnly)}</td>
                 </tr>))}
-              {list.data && !list.data.items.length && <tr><td colSpan={14} style={{ textAlign: 'center', padding: 28, color: 'var(--muted)' }}>No documents found.</td></tr>}
+              {list.data && !list.data.items.length && <tr><td colSpan={shownCols.length} style={{ textAlign: 'center', padding: 28, color: 'var(--muted)' }}>No documents found.</td></tr>}
             </tbody>
           </table>
         </div>
-        <div className="pager">
-          <span>Page {page} of {pages}</span>
-          <span><button disabled={page <= 1} onClick={() => setPage(page - 1)}>Previous</button>{' '}
-            <button disabled={page >= pages} onClick={() => setPage(page + 1)}>Next</button></span>
+        <div className="pager pager-center">
+          <span>Page {page} of {pages}{list.data?.clientMs !== undefined && <small style={{ marginLeft: 10, opacity: .6 }} title="Time to load this page (server time inside the brackets)">⚡ {list.data.clientMs} ms{list.data.ms !== undefined ? ` (server ${list.data.ms} ms)` : ''}</small>}</span>
+          <span className="pager-btns"><button className="pg-btn pg-prev" disabled={page <= 1} onClick={() => setPage(page - 1)} aria-label="Previous page"><span aria-hidden>‹</span> Previous</button>
+            <b className="pager-num"><em>{page}</em><i>of</i>{pages}</b>
+            <button className="pg-btn pg-next" disabled={page >= pages} onClick={() => setPage(page + 1)} aria-label="Next page">Next <span aria-hidden>›</span></button></span>
+          <span aria-hidden />
         </div>
         {current && <DocDetail key={`${current.idDoc}-${lang}`} doc={current} lang={lang} />}
       </div>
       {flow && <WorkflowDialog kind={flow.kind} doc={flow.doc} lang={lang} onClose={() => setFlow(null)}
         onRefresh={() => ['docs', 'doc', 'doc-deep', 'stats', 'groups'].forEach(x => qc.invalidateQueries({ queryKey: [x] }))} onDone={async r => {
         const name = flow.doc.docName; const k = flow.kind; setFlow(null);
+        (k === 'relpub' ? ['release', 'publish'] as const : [k] as const).forEach(a => track(a, { ...flow.doc, status: r.status }, lang));
         await Promise.all(['docs', 'doc', 'doc-deep', 'stats', 'groups'].map(x => qc.invalidateQueries({ queryKey: [x] })));
         setCurrent(c => c && c.idDoc === r.idDoc ? { ...c, status: r.status } : c);
         const rel = `was released as version ${r.version}${r.languages?.length ? `; ${r.languages.join(', ')} now in Edit status` : ''}`;

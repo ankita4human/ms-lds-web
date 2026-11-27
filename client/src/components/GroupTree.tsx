@@ -42,9 +42,9 @@ function filterTree(nodes: TreeItem[], q: string): TreeItem[] {
   return out;
 }
 
-function Row({ node, depth, sel, onSel, open, toggle, onMenu, busy, force, q }: {
+function Row({ node, depth, sel, onSel, open, toggle, onMenu, busy, force, q, onHover }: {
   node: TreeItem; depth: number; sel: NodeSel; onSel: (s: NodeSel) => void; open: Set<number>; toggle: (id: number) => void;
-  onMenu: (e: React.MouseEvent, n: TreeItem) => void; busy?: boolean; force?: boolean; q?: string;
+  onMenu: (e: React.MouseEvent, n: TreeItem) => void; busy?: boolean; force?: boolean; q?: string; onHover?: (id: number | null) => void;
 }) {
   const isOpen = force || open.has(node.idGroup);
   const color = colorOf(node, depth);
@@ -54,7 +54,7 @@ function Row({ node, depth, sel, onSel, open, toggle, onMenu, busy, force, q }: 
     <>
       <div className={`tree-row ${sel === node.idGroup ? 'sel' : ''} ${node.accessible ? '' : 'dim'} ${hit ? 'hit' : ''}`} style={{ ['--c' as string]: color }}
         onClick={() => { if (node.idGroup === STANDARD_ID) toggle(node.idGroup); else { onSel(node.idGroup); if (has && !isOpen) toggle(node.idGroup); } }} onDoubleClick={() => has && toggle(node.idGroup)} title={node.name}
-        onContextMenu={e => onMenu(e, node)}>
+        onContextMenu={e => onMenu(e, node)} onMouseEnter={() => onHover?.(node.idGroup)} onMouseLeave={() => onHover?.(null)}>
         <span className="tw" onClick={e => { e.stopPropagation(); if (has) toggle(node.idGroup); }}>{has ? <Chevron open={isOpen} /> : <i className="dotl" />}</span>
         <span className="gi-emoji">{node.idGroup === STANDARD_ID ? '🏛️' : isOpen && has ? '📂' : '📁'}</span>
         <span className="nm">{node.name}</span>
@@ -63,7 +63,7 @@ function Row({ node, depth, sel, onSel, open, toggle, onMenu, busy, force, q }: 
         {busy && node.idGroup !== STANDARD_ID && <span className="ct ld" aria-label="Counting documents">…</span>}
         {!busy && node.docCount > 0 && node.idGroup !== STANDARD_ID && <span className="ct" title={`${node.docCount} document(s) in this folder, ${node.total} including sub-groups`}>{node.docCount}</span>}
       </div>
-      {isOpen && has && <div className="tree-kids" style={{ ['--c' as string]: color }}>{node.children.map(c => <Row key={c.idGroup} node={c} depth={depth + 1} sel={sel} onSel={onSel} open={open} toggle={toggle} onMenu={onMenu} busy={busy} force={force} q={q} />)}</div>}
+      {isOpen && has && <div className="tree-kids" style={{ ['--c' as string]: color }}>{node.children.map(c => <Row key={c.idGroup} onHover={onHover} node={c} depth={depth + 1} sel={sel} onSel={onSel} open={open} toggle={toggle} onMenu={onMenu} busy={busy} force={force} q={q} />)}</div>}
     </>
   );
 }
@@ -71,9 +71,9 @@ function Row({ node, depth, sel, onSel, open, toggle, onMenu, busy, force, q }: 
 /** Keys of the right-click menus (manual p. 12-14). "printTree" is handled inside the tree, the rest by the page. */
 export type GroupMenuKey = 'view' | 'rename' | 'new' | 'delete' | 'weblink' | 'report' | 'order' | 'web' | 'template' | 'pubOriginal' | 'owner';
 
-export default function GroupTreeView({ groups, total, expired, sel, onSel, rootLabel, countsLoading, reveal, isAdmin, canCreateRoot, templateGroup, onAction }: {
+export default function GroupTreeView({ groups, total, expired, sel, onSel, rootLabel, countsLoading, reveal, isAdmin, canCreateRoot, templateGroup, onAction, onHover }: {
   groups: GroupNode[]; total: number; expired: number; sel: NodeSel; onSel: (s: NodeSel, includeSub?: boolean) => void; rootLabel: string; countsLoading?: boolean; reveal?: { key: number; ids: number[] };
-  isAdmin?: boolean; canCreateRoot?: boolean; templateGroup?: number; onAction?: (key: GroupMenuKey, node: GroupNode | null) => void;
+  isAdmin?: boolean; canCreateRoot?: boolean; templateGroup?: number; onAction?: (key: GroupMenuKey, node: GroupNode | null) => void; onHover?: (id: number | null) => void;
 }) {
   const allRoots = useMemo(() => build(groups), [groups]);
   const [fq, setFq] = useState('');
@@ -166,7 +166,7 @@ export default function GroupTreeView({ groups, total, expired, sel, onSel, root
       <div className={`tree-row top all ${sel === 'all' ? 'sel' : ''}`} onClick={() => onSel('all')} onContextMenu={e => openMenu(e, null)}>
         <span className="tw" /><span className="gi-emoji">🗂️</span><span className="nm">All documents</span><span className={`ct ${countsLoading ? 'ld' : ''}`}>{countsLoading ? '…' : total}</span>
       </div>
-      {roots.map(r => <Row key={r.idGroup} node={r} depth={0} sel={sel} onSel={onSel} open={open} toggle={toggle} onMenu={openMenu} busy={countsLoading} force={!!q} q={q} />)}
+      {roots.map(r => <Row key={r.idGroup} onHover={onHover} node={r} depth={0} sel={sel} onSel={onSel} open={open} toggle={toggle} onMenu={openMenu} busy={countsLoading} force={!!q} q={q} />)}
       {q && roots.length === 0 && <div className="mh" style={{ padding: '10px 14px' }}>No folder matches “{fq}”.</div>}
       <div className="sep" style={{ height: 1, background: 'var(--line)', margin: '8px 4px' }} />
       <div className={`tree-row top exp ${sel === 'expired' ? 'sel' : ''}`} onClick={() => onSel('expired')}>

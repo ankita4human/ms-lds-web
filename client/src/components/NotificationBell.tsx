@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { FileIcon } from './bits';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import UserAvatar from './UserAvatar';
@@ -10,14 +11,6 @@ const SEEN = 'pl_notif_seen';
 const readSeen = () => { try { return localStorage.getItem(SEEN); } catch { return null; } };
 const writeSeen = (v: string) => { try { localStorage.setItem(SEEN, v); } catch { /* private mode */ } };
 
-const FILE: Record<string, { t: string; c: string }> = {
-  doc: { t: 'W', c: '#2b579a' }, docx: { t: 'W', c: '#2b579a' }, docm: { t: 'W', c: '#2b579a' }, rtf: { t: 'W', c: '#2b579a' },
-  xls: { t: 'X', c: '#1d6f42' }, xlsx: { t: 'X', c: '#1d6f42' }, xlsm: { t: 'X', c: '#1d6f42' }, csv: { t: 'X', c: '#1d6f42' },
-  ppt: { t: 'P', c: '#c43e1c' }, pptx: { t: 'P', c: '#c43e1c' }, pps: { t: 'P', c: '#c43e1c' }, ppsx: { t: 'P', c: '#c43e1c' },
-  pdf: { t: 'PDF', c: '#d92d20' }, vsd: { t: 'V', c: '#3955a3' }, vsdx: { t: 'V', c: '#3955a3' }, vdx: { t: 'V', c: '#3955a3' },
-  txt: { t: 'TXT', c: '#667085' }, png: { t: 'IMG', c: '#7a5af8' }, jpg: { t: 'IMG', c: '#7a5af8' }, jpeg: { t: 'IMG', c: '#7a5af8' },
-};
-const fileOf = (ext: string) => FILE[ext] ?? { t: (ext || 'file').slice(0, 3).toUpperCase(), c: '#475467' };
 
 const PALETTE = ['#2f6df6', '#7a5af8', '#0e9384', '#dd6b20', '#d6336c', '#2e90fa', '#16a34a', '#b54708'];
 const colorOf = (s: string) => PALETTE[[...s].reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) >>> 0, 7) % PALETTE.length];
@@ -227,12 +220,12 @@ export default function NotificationBell({ lang }: { lang: string }) {
               <div key={g.label} className="nb-sec">
                 <div className="nb-sec-h"><span>{g.label}</span></div>
                 {g.rows.map(i => {
-                  const f = fileOf(i.ext); const mine = i.publishedById === me;
+                  const mine = i.publishedById === me;
                   return (
                     <button key={key(i)} className={`nb-item ${fresh.has(key(i)) ? 'new' : ''}`} onClick={() => { setOpen(false); nav(`/documents?doc=${i.idDoc}`); }}>
                       <span className="nb-av">
                         {mine ? <UserAvatar id={me} className="nb-me" name={myName} /> : <span className="nb-av-i" style={{ background: colorOf(i.publishedBy) }}>{initials(i.publishedBy)}</span>}
-                        <span className="nb-ft" style={{ background: f.c }} title={i.ext ? `.${i.ext}` : 'file'}>{f.t}</span>
+                        <span className="nb-ft nb-ft-ico" title={i.ext ? `.${i.ext}` : 'file'}><FileIcon ext={i.ext} size={26} /></span>
                       </span>
                       <span className="nb-tx">
                         <span className="nb-line"><b>{mine ? 'You' : i.publishedBy}</b> published <b>{i.docName}</b></span>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { StatusBadge, fmtDate } from './bits';
+import { StatusBadge, ExtBadge, fmtDate } from './bits';
 import type { Msg } from './assistantEngine';
 
 /** Tiny markdown subset: **bold**, *italic*, `code`, "- " bullets, "1. " steps. */
@@ -54,7 +54,7 @@ export function MessageExtras({ m, go, ask, showFollow, busy }: { m: Msg; go: (t
         <div className="bot-results">
           {m.hits.map(h => (
             <button key={`${h.idDoc}${h.lang}`} className="bot-doc hit" onClick={() => go(`/documents?doc=${h.idDoc}`)}>
-              <div className="bot-doc-top"><b>#{h.idDoc} · {h.ext ? h.ext.toUpperCase() : 'FILE'} · v{h.version}</b><StatusBadge id={h.status} name={h.statusName} /></div>
+              <div className="bot-doc-top"><span className="bot-doc-id"><ExtBadge ext={h.ext} compact /><b>#{h.idDoc} · v{h.version}</b></span><StatusBadge id={h.status} name={h.statusName} /></div>
               <div className="bot-doc-name">{h.docName}</div>
               {h.folder && <div className="bot-doc-meta">📁 {h.folder}</div>}
               <div className="bot-snip"><Snip text={h.snippet} /></div>

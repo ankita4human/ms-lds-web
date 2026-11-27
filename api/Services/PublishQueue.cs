@@ -26,7 +26,7 @@ public class PubJob
     public string? MailError { get; set; }
 }
 
-/// In-memory publish queue: the request only puts the document in line and returns; PublishWorker publishes one document after the other.
+/// In-memory publish queue: the request only puts the document in line and returns; PublishWorker publishes up to Publish:MaxParallel documents at the same time.
 /// (Jobs are lost when the API restarts - the published documents themselves are in the database, so the notification list survives.)
 public class PublishQueue
 {
@@ -45,6 +45,9 @@ public class PublishQueue
         return job;
     }
 
+    /// Jobs waiting / publishing right now (for the notification list).
+    public (int queued, int running) Counts() { int q = 0, r = 0; foreach (var j in jobs.Values) { if (j.Status == "queued") q++; else if (j.Status == "running") r++; } return (q, r); }
+
     public int Position(PubJob j) => j.Status == "queued" ? jobs.Values.Count(x => x.Status == "queued" && x.QueuedAt <= j.QueuedAt) : 0;
 
     public IEnumerable<PubJob> For(int user) => jobs.Values.Where(j => j.UserId == user && !j.Dismissed).OrderByDescending(j => j.QueuedAt);
@@ -62,33 +65,47 @@ public class PublishQueue
     }
 }
 
-public class PublishWorker(PublishQueue queue, DocPublisher publisher, MailService mail, ILogger<PublishWorker> log) : BackgroundService
+/// Takes the jobs in the order they were queued and publishes up to `Publish:MaxParallel` (default 5) documents at the same time.
+/// Every further request stays queued and starts as soon as one of the running publishes is finished (a rolling window, not batches of five).
+public class PublishWorker(PublishQueue queue, DocPublisher publisher, MailService mail, IConfiguration cfg, ILogger<PublishWorker> log) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stop)
     {
+        var max = Math.Clamp(cfg.GetValue("Publish:MaxParallel", 5), 1, 20);
+        var slots = new SemaphoreSlim(max, max);
+        var inflight = new System.Collections.Concurrent.ConcurrentDictionary<Task, byte>();
+        log.LogInformation("Publish queue: up to {Max} documents are published at the same time", max);
         try
         {
             await foreach (var job in queue.Reader.ReadAllAsync(stop))
             {
-                job.Status = "running"; job.StartedAt = DateTime.Now;
-                try
-                {
-                    var r = await publisher.Publish(job.IdDoc, job.Lang, job.UserId);
-                    job.Files = r.Files.Count; job.TagsReplaced = r.TagsReplaced; job.Warnings = r.Warnings;
-                    job.Status = "done";
-                    if (job.Mail is { Send: true } m) { job.MailStatus = "sending"; var j2 = job; _ = Task.Run(() => mail.SendForJob(j2, m)); }   // does not hold up the queue
-                    log.LogInformation("Published D{Id} ({Lang}) with {Files} files", job.IdDoc, job.Lang, job.Files);
-                }
-                catch (PublishException ex) { job.Error = ex.Message; job.Status = "failed"; log.LogWarning("Publish D{Id} ({Lang}) failed: {Msg}", job.IdDoc, job.Lang, ex.Message); }
-                catch (Exception ex)
-                {
-                    job.Error = ex is IOException or UnauthorizedAccessException ? "A file could not be written on the server (web folder or temp folder): " + ex.Message : ex.GetBaseException().Message;
-                    job.Status = "failed"; log.LogError(ex, "Publish D{Id} ({Lang}) failed", job.IdDoc, job.Lang);
-                }
-                job.FinishedAt = DateTime.Now;
-                queue.Cleanup();
+                await slots.WaitAsync(stop);                    // all slots busy: this job (and the ones behind it) wait here, still "queued"
+                var t = Task.Run(async () => { try { await RunJob(job); } finally { slots.Release(); } }, CancellationToken.None);
+                inflight[t] = 0; _ = t.ContinueWith(x => inflight.TryRemove(x, out _), TaskScheduler.Default);
             }
         }
         catch (OperationCanceledException) { /* shutting down */ }
+        try { await Task.WhenAll(inflight.Keys).WaitAsync(TimeSpan.FromSeconds(20)); } catch { /* give up waiting */ }
+    }
+
+    async Task RunJob(PubJob job)
+    {
+        job.Status = "running"; job.StartedAt = DateTime.Now;
+        try
+        {
+            var r = await publisher.Publish(job.IdDoc, job.Lang, job.UserId);
+            job.Files = r.Files.Count; job.TagsReplaced = r.TagsReplaced; job.Warnings = r.Warnings;
+            job.Status = "done";
+            if (job.Mail is { Send: true } m) { job.MailStatus = "sending"; _ = Task.Run(() => mail.SendForJob(job, m)); }   // does not hold up the queue
+            log.LogInformation("Published D{Id} ({Lang}) with {Files} files", job.IdDoc, job.Lang, job.Files);
+        }
+        catch (PublishException ex) { job.Error = ex.Message; job.Status = "failed"; log.LogWarning("Publish D{Id} ({Lang}) failed: {Msg}", job.IdDoc, job.Lang, ex.Message); }
+        catch (Exception ex)
+        {
+            job.Error = ex is IOException or UnauthorizedAccessException ? "A file could not be written on the server (web folder or temp folder): " + ex.Message : ex.GetBaseException().Message;
+            job.Status = "failed"; log.LogError(ex, "Publish D{Id} ({Lang}) failed", job.IdDoc, job.Lang);
+        }
+        job.FinishedAt = DateTime.Now;
+        queue.Cleanup();
     }
 }

@@ -3,10 +3,12 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, type DocRow } from '../api';
 import ConfirmDialog from './ConfirmDialog';
 import Toast, { type ToastMsg } from './Toast';
-import { StatusBadge, fmtDate, version } from './bits';
+import { StatusBadge, ExtBadge, fmtDate, version } from './bits';
 import { ControlPane, CatchPane, LinkPane, DependencyPane } from './DocTabs';
+import ArchivesPane from './ArchivesPane';
+import PropertiesEditor from './PropertiesEditor';
 
-type Tab = 'general' | 'control' | 'catch' | 'history' | 'dep' | 'dist' | 'link' | 'assign';
+type Tab = 'general' | 'control' | 'catch' | 'archives' | 'dep' | 'dist' | 'link' | 'assign';
 
 /** Distribution tab: e-mail distribution lists of the document (legacy addMLtoDoc / removeMLfromDoc / getEmailListByDocs). */
 function DistributionPane({ docId, lang }: { docId: number; lang: string }) {
@@ -62,7 +64,7 @@ export default function DocDetail({ doc, lang }: { doc: DocRow; lang: string }) 
         <button className={tab === 'general' ? 'on' : ''} onClick={() => setTab('general')}>General</button>
         <button className={tab === 'control' ? 'on' : ''} onClick={() => setTab('control')}>Control</button>
         <button className={tab === 'catch' ? 'on' : ''} onClick={() => setTab('catch')}>Catch</button>
-        <button className={tab === 'history' ? 'on' : ''} onClick={() => setTab('history')}>History ({q.data?.history.length ?? 0})</button>
+        <button className={tab === 'archives' ? 'on' : ''} onClick={() => setTab('archives')}>Archives</button>
         <button className={tab === 'dep' ? 'on' : ''} onClick={() => setTab('dep')}>Dependency</button>
         <button className={tab === 'dist' ? 'on' : ''} onClick={() => setTab('dist')}>Distribution ({dist.data?.lists.length ?? 0})</button>
         <button className={tab === 'link' ? 'on' : ''} onClick={() => setTab('link')}>Linking</button>
@@ -73,8 +75,10 @@ export default function DocDetail({ doc, lang }: { doc: DocRow; lang: string }) 
         {tab === 'general' && (
           <>
             <h3 style={{ fontSize: 18, marginBottom: 14 }}>{d.docName} <small style={{ color: 'var(--muted)', fontWeight: 400 }}>#{d.idDoc}</small></h3>
+            <PropertiesEditor docId={doc.idDoc} lang={lang} />
             <div className="detail-grid">
               <div className="kv"><small>Type</small>{d.typeName}</div>
+              <div className="kv"><small>File type</small><ExtBadge ext={d.extension} /></div>
               <div className="kv"><small>Status</small><StatusBadge id={d.status} name={d.statusName} /></div>
               <div className="kv"><small>Version</small>{version(d)}</div>
               <div className="kv"><small>Standard language</small>{d.langStandard ?? '-'}</div>
@@ -89,14 +93,7 @@ export default function DocDetail({ doc, lang }: { doc: DocRow; lang: string }) 
             {q.data?.notes?.trim() && <div className="notes"><b>Notes</b><br />{q.data.notes}</div>}
           </>
         )}
-        {tab === 'history' && (
-          q.data?.history.length ? (
-            <table className="grid-table"><thead><tr><th>Date</th><th>Version</th><th>User</th><th>Change</th></tr></thead>
-              <tbody>{q.data.history.map((h, i) => (
-                <tr key={i}><td>{fmtDate(h.modDate)}</td><td>{h.v1}.{h.v2}.{h.v3}</td><td>{h.user ?? '-'}</td>
-                  <td style={{ whiteSpace: 'normal' }}>{h.modDesc}</td></tr>))}</tbody></table>
-          ) : <div className="empty" style={{ height: 80 }}>No history entries.</div>
-        )}
+        {tab === 'archives' && <ArchivesPane docId={doc.idDoc} lang={lang} />}
         {tab === 'control' && <ControlPane docId={doc.idDoc} lang={lang} />}
         {tab === 'catch' && <CatchPane docId={doc.idDoc} lang={lang} />}
         {tab === 'dep' && <DependencyPane docId={doc.idDoc} lang={lang} />}

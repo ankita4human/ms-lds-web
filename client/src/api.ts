@@ -1,4 +1,6 @@
-const BASE = (import.meta.env.VITE_API_URL as string | undefined) ?? '';
+// VITE_API_URL points the browser straight at the API. Setting localStorage pl_api_base (empty = same site) overrides it,
+// which lets the Vite dev proxy (/api -> API) be used without editing .env.local.
+const BASE = (() => { try { const o = localStorage.getItem('pl_api_base'); if (o !== null) return o; } catch { /* storage blocked */ } return (import.meta.env.VITE_API_URL as string | undefined) ?? ''; })();
 const KEY = 'pl_token';
 export const auth = {
   get: () => sessionStorage.getItem(KEY),
@@ -27,7 +29,7 @@ export type DocRow = {
   dateCre?: string; dateMod?: string; dateExp?: string; datePub?: string; dateRel?: string; doNotExpire?: boolean; isCycle?: boolean; doNotPublish?: boolean;
   creator?: string; publisher?: string; releaser?: string; paths?: string[];
 };
-export type DocPage = { total: number; page: number; pageSize: number; items: DocRow[] };
+export type DocPage = { total: number; page: number; pageSize: number; items: DocRow[]; ms?: number; clientMs?: number };
 export type GroupNode = { idGroup: number; idParent: number; name: string; sort: number; groupType?: number; docCount: number; accessible: boolean;
   hasChildren?: boolean; doNotPublish?: boolean; pubOriginal?: boolean; idProcessOwner?: number; processOwner?: string };
 export type GroupTree = { groups: GroupNode[]; total: number; expired: number; templateGroup?: number; canCreateRoot?: boolean };
@@ -83,6 +85,59 @@ export async function downloadDocFile(id: number, lang: string, fallbackName?: s
   const a = document.createElement('a'); a.href = url; a.download = (() => { try { return decodeURIComponent(name); } catch { return name; } })(); document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 5000);
 }
+
+/** Opens a document in a new browser tab (PDF and pictures as they are, Office and text files as an HTML page), or saves the HTML version. */
+export async function previewDocFile(id: number, lang: string, o: { html?: boolean; download?: boolean } = {}): Promise<void> {
+  // the tab must be opened inside the click, before the request: browsers block pop-ups opened after an await
+  const w = o.download ? null : window.open('', '_blank');
+  if (w) { try { w.document.write('<title>Loading…</title><body style="font:16px system-ui;padding:40px;color:#334155">Loading the document…</body>'); } catch { /* cross-origin tab: ignore */ } }
+  try {
+    const t = auth.get();
+    const q = `lang=${encodeURIComponent(lang)}${o.html ? '&html=true' : ''}${o.download ? '&download=true' : ''}`;
+    const r = await fetch(`${BASE}/api/lds/documents/${id}/preview?${q}`, { headers: t ? { Authorization: `Bearer ${t}` } : {} });
+    if (!r.ok) { let m = `The document could not be shown (${r.status})`; try { const j = await r.json(); if (j?.error) m = j.error; } catch { /* no body */ } throw new Error(m); }
+    const name = (() => { try { return decodeURIComponent(r.headers.get('X-File-Name') ?? ''); } catch { return ''; } })() || `D${id}`;
+    const url = URL.createObjectURL(await r.blob());
+    if (o.download || !w) { const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); }
+    else w.location.href = url;
+    setTimeout(() => URL.revokeObjectURL(url), 5 * 60_000);
+  } catch (e) { w?.close(); throw e; }
+}
+
+export type ArchiveItem = { v1: number; v2: number; v3: number; docName?: string; status: number; statusName: string; dateEdited?: string; editor?: string; reason?: string; extension?: string; deleted: boolean; propChanges: boolean; hasFile: boolean };
+export type ArchiveMod = { v1: number; v2: number; v3: number; user?: string; modDate?: string; modDesc?: string };
+export type PropMod = ArchiveMod & { propertyType?: string; oldValue?: string; newValue?: string };
+const archQ = (lang: string, v: { v1: number; v2: number; v3: number }) => `lang=${encodeURIComponent(lang)}&v1=${v.v1}&v2=${v.v2}&v3=${v.v3}`;
+export const archivesApi = {
+  list: (id: number, lang: string) => req<{ canView: boolean; items: ArchiveItem[] }>(`/api/lds/documents/${id}/archives?lang=${encodeURIComponent(lang)}`),
+  history: (id: number, lang: string, v: { v1: number; v2: number; v3: number }) => req<{ items: ArchiveMod[] }>(`/api/lds/documents/${id}/archives/history?${archQ(lang, v)}`),
+  propertyChanges: (id: number, lang: string, v: { v1: number; v2: number; v3: number }) => req<{ items: PropMod[] }>(`/api/lds/documents/${id}/archives/property-changes?${archQ(lang, v)}`),
+};
+
+/** Archives tab > Show: opens one archived version as PDF or as the original (in the browser, or saved when download is true). */
+export async function showArchive(id: number, lang: string, v: { v1: number; v2: number; v3: number }, view: 'pdf' | 'original', download = false): Promise<void> {
+  const w = download ? null : window.open('', '_blank');   // opened inside the click: browsers block pop-ups after an await
+  if (w) { try { w.document.write('<title>Loading…</title><body style="font:16px system-ui;padding:40px;color:#334155">Loading the archived version…</body>'); } catch { /* ignore */ } }
+  try {
+    const t = auth.get();
+    const r = await fetch(`${BASE}/api/lds/documents/${id}/archives/show?${archQ(lang, v)}&view=${view}${download ? '&download=true' : ''}`, { headers: t ? { Authorization: `Bearer ${t}` } : {} });
+    if (!r.ok) { let m = `The archived version could not be shown (${r.status})`; try { const j = await r.json(); if (j?.error) m = j.error; } catch { /* no body */ } throw new Error(m); }
+    const name = (() => { try { return decodeURIComponent(r.headers.get('X-File-Name') ?? ''); } catch { return ''; } })() || `D${id}_V${v.v1}.${v.v2}.${v.v3}`;
+    const url = URL.createObjectURL(await r.blob());
+    if (download || !w) { const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); }
+    else w.location.href = url;
+    setTimeout(() => URL.revokeObjectURL(url), 5 * 60_000);
+  } catch (e) { w?.close(); throw e; }
+}
+
+export type DocProps = { canEdit: boolean; name?: string; typeId?: number; authorId?: number; ownerId?: number; status?: number; published?: boolean; types?: IdLabel2[]; users?: IdLabel2[] };
+type IdLabel2 = { id: number; name: string };
+export type PropsChange = { name?: string; typeId?: number; authorId?: number; ownerId?: number; reason: string };
+export const propsApi = {
+  get: (id: number, lang: string) => req<DocProps>(`/api/lds/documents/${id}/properties?lang=${encodeURIComponent(lang)}`),
+  save: (id: number, lang: string, c: PropsChange) => req<{ idDoc: number; changed: string[]; republished: string[] }>(`/api/lds/documents/${id}/properties`, { method: 'PUT', body: JSON.stringify({ lang, ...c }) }),
+  simulatable: () => req<{ id: number; login: string; name: string }[]>('/api/lds/users/simulatable'),
+};
 
 export type DateRange = { active: boolean; from: string; to: string };
 export type FilterCriteria = {
@@ -165,7 +220,7 @@ export type WfTaskItem = { taskId: number; idDoc: number; lang: string; docName:
 export type WfTaskNote = { taskId: number; idDoc: number; lang: string; docName: string; workflow: string; step: string; layer: number; layerName: string; startedBy: string; assigned?: string; due?: string; overdue: boolean };
 export type ContentItem = { idDoc: number; lang: string; docName: string; ext: string; status: number; statusName: string; version: string; folder?: string | null; snippet: string; score: number };
 export type ContentSearch = { items: ContentItem[]; indexed: number; running: boolean };
-export type IndexStatus = { documents: number; pending: number; running: boolean; lastStart?: string; lastEnd?: string; indexed: number; skipped: number; failed: number; note?: string };
+export type IndexStatus = { documents: number; pending: number; running: boolean; lastStart?: string; lastEnd?: string; indexed: number; skipped: number; failed: number; note?: string; missing?: number; noText?: number; unsupported?: number; problems?: string[] };
 export type WfSummary = { enabled: boolean; total: number; overdue: number; counts: number[]; items: WfTaskNote[] };
 export type WfTasks = { enabled: boolean; counts: number[]; layerNames?: string[]; items: WfTaskItem[] };
 export type WfHandOver = { lang: string; nextMoveId: number; editorId: number; due?: string | null; remark?: string };
@@ -395,7 +450,8 @@ export const api = {
   documents: (q: DocQuery) => {
     const p = new URLSearchParams();
     Object.entries(q).forEach(([k, v]) => v !== undefined && v !== '' && v !== false && p.set(k, String(v)));
-    return req<DocPage>(`/api/lds/documents?${p}`);
+    const t0 = performance.now();
+    return req<DocPage>(`/api/lds/documents?${p}`).then(r => ({ ...r, clientMs: Math.round(performance.now() - t0) }));
   },
   document: (id: number, lang: string) => req<DocDetail>(`/api/lds/documents/${id}?lang=${encodeURIComponent(lang)}`),
 };
