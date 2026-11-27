@@ -46,10 +46,12 @@ export default function LoginMonkey({ cover, peek, mood, look }: { cover: boolea
           {[{ c: 'hl', x: 46 }, { c: 'hr', x: 114 }].map(h => (
             <g key={h.c} className={`mk-hand ${h.c}`}>
               <g transform={`translate(${h.x} 176)`}>
-                <rect x="-12" y="4" width="24" height="150" rx="11" fill="url(#mkfur)" />
-                <ellipse rx="22" ry="18" fill="url(#mkfur)" />
-                {[-13, -4.5, 4.5, 13].map(f => <rect key={f} x={f - 4} y="-30" width="8" height="20" rx="4" fill="#a8703b" stroke="#7a4a24" strokeWidth="1.2" />)}
-                <ellipse cx="0" cy="-2" rx="14" ry="9" fill="#f0c9a0" opacity=".55" />
+                {/* chunky arm, palm, four plump fingers, thumb and a soft palm pad */}
+                <rect x="-19" y="4" width="38" height="150" rx="18" fill="url(#mkfur)" stroke="#7a4a24" strokeWidth="1.6" />
+                <ellipse rx="31" ry="26" fill="url(#mkfur)" stroke="#7a4a24" strokeWidth="1.6" />
+                <ellipse cx={h.c === 'hl' ? 24 : -24} cy="-6" rx="11" ry="14" fill="#b57a43" stroke="#7a4a24" strokeWidth="1.6" transform={`rotate(${h.c === 'hl' ? 35 : -35} ${h.c === 'hl' ? 24 : -24} -6)`} />
+                {[-19, -6.5, 6.5, 19].map(f => <g key={f}><rect x={f - 6.5} y="-40" width="13" height="30" rx="6.5" fill="#b57a43" stroke="#7a4a24" strokeWidth="1.6" /><path d={`M${f - 3.5} -30 h7`} stroke="#7a4a24" strokeWidth="1.2" strokeLinecap="round" opacity=".55" /></g>)}
+                <ellipse cx="0" cy="2" rx="20" ry="13" fill="#f0c9a0" opacity=".7" />
               </g>
             </g>))}
         </g>

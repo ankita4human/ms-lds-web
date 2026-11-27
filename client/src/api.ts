@@ -1,3 +1,4 @@
+import { getUiLang, tr } from './i18n';
 // VITE_API_URL points the browser straight at the API. Setting localStorage pl_api_base (empty = same site) overrides it,
 // which lets the Vite dev proxy (/api -> API) be used without editing .env.local.
 const BASE = (() => { try { const o = localStorage.getItem('pl_api_base'); if (o !== null) return o; } catch { /* storage blocked */ } return (import.meta.env.VITE_API_URL as string | undefined) ?? ''; })();
@@ -12,10 +13,11 @@ async function req<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (!(init.body instanceof FormData)) headers.set('Content-Type', 'application/json');
   const t = auth.get();
   if (t) headers.set('Authorization', `Bearer ${t}`);
+  headers.set('X-UI-Lang', getUiLang());   // interface language: the API names statuses and types in it
   const r = await fetch(`${BASE}${path}`, { ...init, headers });
   if (r.status === 401 && path !== '/api/lds/login') { auth.clear(); location.assign('/login'); }
   if (!r.ok) {
-    let msg = r.status === 401 ? 'Invalid login or password' : `Request failed (${r.status})`;
+    let msg = r.status === 401 ? tr('Invalid login or password') : tr('Request failed ({0})', r.status);
     try { const j = await r.json(); if (j?.error) msg = j.error; } catch { /* no body */ }
     throw new Error(msg);
   }
@@ -63,13 +65,13 @@ export function uploadDocument(form: FormData, onProgress: (pct: number) => void
     x.open('POST', `${BASE}/api/lds/documents/upload`);
     const t = auth.get(); if (t) x.setRequestHeader('Authorization', `Bearer ${t}`);
     x.upload.onprogress = e => e.lengthComputable && onProgress(Math.round((e.loaded / e.total) * 100));
-    x.onerror = () => reject(new Error('Network error: the API is not reachable.'));
+    x.onerror = () => reject(new Error(tr('Network error: the API is not reachable.')));
     x.onload = () => {
       let body: { error?: string } & Partial<UploadResult> = {};
       try { body = JSON.parse(x.responseText); } catch { /* no body */ }
       if (x.status === 401) { auth.clear(); location.assign('/login'); }
       if (x.status >= 200 && x.status < 300) resolve(body as UploadResult);
-      else reject(new Error(body.error ?? `Upload failed (${x.status})`));
+      else reject(new Error(body.error ?? tr('Upload failed ({0})', x.status)));
     };
     x.send(form);
   });
@@ -78,7 +80,7 @@ export function uploadDocument(form: FormData, onProgress: (pct: number) => void
 export async function downloadDocFile(id: number, lang: string, fallbackName?: string): Promise<void> {
   const t = auth.get();
   const r = await fetch(`${BASE}/api/lds/documents/${id}/file?lang=${encodeURIComponent(lang)}`, { headers: t ? { Authorization: `Bearer ${t}` } : {} });
-  if (!r.ok) { let m = `Download failed (${r.status})`; try { const j = await r.json(); if (j?.error) m = j.error; } catch { /* no body */ } throw new Error(m); }
+  if (!r.ok) { let m = tr('Download failed ({0})', r.status); try { const j = await r.json(); if (j?.error) m = j.error; } catch { /* no body */ } throw new Error(m); }
   const cd = r.headers.get('Content-Disposition') ?? '';
   const name = r.headers.get('X-File-Name') ?? /filename\*=(?:UTF-8'')?"?([^";]+)"?/i.exec(cd)?.[1] ?? /filename="?([^";]+)"?/i.exec(cd)?.[1] ?? fallbackName ?? `D${id}_${lang}`;
   const url = URL.createObjectURL(await r.blob());
@@ -95,7 +97,7 @@ export async function previewDocFile(id: number, lang: string, o: { html?: boole
     const t = auth.get();
     const q = `lang=${encodeURIComponent(lang)}${o.html ? '&html=true' : ''}${o.download ? '&download=true' : ''}`;
     const r = await fetch(`${BASE}/api/lds/documents/${id}/preview?${q}`, { headers: t ? { Authorization: `Bearer ${t}` } : {} });
-    if (!r.ok) { let m = `The document could not be shown (${r.status})`; try { const j = await r.json(); if (j?.error) m = j.error; } catch { /* no body */ } throw new Error(m); }
+    if (!r.ok) { let m = tr('The document could not be shown ({0})', r.status); try { const j = await r.json(); if (j?.error) m = j.error; } catch { /* no body */ } throw new Error(m); }
     const name = (() => { try { return decodeURIComponent(r.headers.get('X-File-Name') ?? ''); } catch { return ''; } })() || `D${id}`;
     const url = URL.createObjectURL(await r.blob());
     if (o.download || !w) { const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); }
@@ -121,7 +123,7 @@ export async function showArchive(id: number, lang: string, v: { v1: number; v2:
   try {
     const t = auth.get();
     const r = await fetch(`${BASE}/api/lds/documents/${id}/archives/show?${archQ(lang, v)}&view=${view}${download ? '&download=true' : ''}`, { headers: t ? { Authorization: `Bearer ${t}` } : {} });
-    if (!r.ok) { let m = `The archived version could not be shown (${r.status})`; try { const j = await r.json(); if (j?.error) m = j.error; } catch { /* no body */ } throw new Error(m); }
+    if (!r.ok) { let m = tr('The archived version could not be shown ({0})', r.status); try { const j = await r.json(); if (j?.error) m = j.error; } catch { /* no body */ } throw new Error(m); }
     const name = (() => { try { return decodeURIComponent(r.headers.get('X-File-Name') ?? ''); } catch { return ''; } })() || `D${id}_V${v.v1}.${v.v2}.${v.v3}`;
     const url = URL.createObjectURL(await r.blob());
     if (download || !w) { const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); }
@@ -218,7 +220,7 @@ export type WfRun = { run: number; current: boolean; workflow: string; data: { r
 export type WfTaskItem = { taskId: number; idDoc: number; lang: string; docName: string; ext?: string; status: number; statusName: string; version: string; workflow: string; step: string;
   layer: number; layerName: string; startedBy: string; assigned?: string; due?: string; overdue: boolean; remark: string };
 export type WfTaskNote = { taskId: number; idDoc: number; lang: string; docName: string; workflow: string; step: string; layer: number; layerName: string; startedBy: string; assigned?: string; due?: string; overdue: boolean };
-export type ContentItem = { idDoc: number; lang: string; docName: string; ext: string; status: number; statusName: string; version: string; folder?: string | null; snippet: string; score: number };
+export type ContentItem = { idDoc: number; lang: string; docName: string; ext: string; status: number; statusName: string; version: string; folder?: string | null; snippet: string; score: number; catchWords?: string[]; via?: 'text' | 'catch' | 'text+catch' };
 export type ContentSearch = { items: ContentItem[]; indexed: number; running: boolean };
 export type IndexStatus = { documents: number; pending: number; running: boolean; lastStart?: string; lastEnd?: string; indexed: number; skipped: number; failed: number; note?: string; missing?: number; noText?: number; unsupported?: number; problems?: string[] };
 export type WfSummary = { enabled: boolean; total: number; overdue: number; counts: number[]; items: WfTaskNote[] };
@@ -257,7 +259,7 @@ async function fetchPhoto(id: number): Promise<string | null> {
   const t = auth.get();
   const r = await fetch(`${BASE}/api/lds/users/${id}/photo`, { headers: t ? { Authorization: `Bearer ${t}` } : {} });
   if (r.status === 204 || r.status === 404) return null;
-  if (!r.ok) throw new Error(`Photo request failed (${r.status})`);
+  if (!r.ok) throw new Error(tr('Photo request failed ({0})', r.status));
   return URL.createObjectURL(await r.blob());
 }
 
@@ -467,7 +469,7 @@ export const simulation = {
 export async function downloadUserRights(lang: string): Promise<void> {
   const t = auth.get();
   const r = await fetch(`${BASE}/api/lds/users/export-rights?lang=${encodeURIComponent(lang)}`, { headers: t ? { Authorization: `Bearer ${t}` } : {} });
-  if (!r.ok) { let m = `Export failed (${r.status})`; try { const j = await r.json(); if (j?.error) m = j.error; } catch { /* no body */ } throw new Error(m); }
+  if (!r.ok) { let m = tr('Export failed ({0})', r.status); try { const j = await r.json(); if (j?.error) m = j.error; } catch { /* no body */ } throw new Error(m); }
   const url = URL.createObjectURL(await r.blob());
   const a = document.createElement('a'); a.href = url; a.download = 'MS-LDS-User-Rights.csv'; document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 5000);

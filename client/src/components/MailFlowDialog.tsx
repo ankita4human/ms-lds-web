@@ -4,6 +4,7 @@ import { api, type DocRow, type FlowResult, type MailDraft, type MailPayload, ty
 import { PageLoader, Spinner } from './Loader';
 import RichEditor, { blockText, sanitizeHtml } from './RichEditor';
 import RecipientInput, { isEmail } from './RecipientInput';
+import { tr } from '../i18n';
 
 type Stage = 'release' | 'publish';
 type Kind = 'release' | 'publish' | 'relpub';
@@ -88,7 +89,7 @@ export default function MailFlowDialog({ kind, doc, lang, onClose, onDone }: {
     const p = payload(s); if (!p || !p.send) return '';
     const all = [...p.to, ...p.cc];
     if (all.length === 0) return `${STAGE_NAME[s]}: add at least one recipient, or switch the e-mail off.`;
-    const bad = all.find(e => !isEmail(e)); if (bad) return `${STAGE_NAME[s]}: “${bad}” is not a valid e-mail address.`;
+    const bad = all.find(e => !isEmail(e)); if (bad) return tr('{0}: “{1}” is not a valid e-mail address.', STAGE_NAME[s], bad);
     if (!p.subject) return `${STAGE_NAME[s]}: please enter a subject.`;
     return '';
   }
@@ -109,13 +110,13 @@ export default function MailFlowDialog({ kind, doc, lang, onClose, onDone }: {
   async function test() {
     const p = payload(tab); if (!p) return;
     setErr(''); setInfo(''); setTesting(true);
-    try { const r = await api.mailTest(doc.idDoc, lang, p); setInfo(`A test copy was sent to ${r.sentTo}.`); }
+    try { const r = await api.mailTest(doc.idDoc, lang, p); setInfo(tr('A test copy was sent to {0}.', r.sentTo)); }
     catch (e) { setErr((e as Error).message); } finally { setTesting(false); }
   }
 
   const sending = stages.filter(s => { const p = payload(s); return p?.send; });
   const T = TITLE[kind];
-  const label = kind === 'relpub' ? `${T.button}${sending.length ? ` · ${sending.length} e-mail${sending.length > 1 ? 's' : ''}` : ''}`
+  const label = kind === 'relpub' ? `${T.button}${sending.length ? tr(' · {0} e-mail{1}', sending.length, sending.length > 1 ? 's' : '') : ''}`
     : sending.length ? `${T.button} & send e-mail` : `${T.button} without e-mail`;
   const loading = (!noMail && !loadErr && stages.some(s => !st[s])) || (kind !== 'publish' && opts.isLoading);
 
@@ -126,19 +127,18 @@ export default function MailFlowDialog({ kind, doc, lang, onClose, onDone }: {
       <div className="modal mf" role="dialog" aria-modal="true" aria-label={T.title} onMouseDown={e => e.stopPropagation()}>
         <div className="modal-head">
           <div className="mf-title"><span className="mf-ico" aria-hidden="true">{T.icon}</span>
-            <div><h3>{T.title}</h3><div className="mh"><b>{doc.docName}</b> · #{doc.idDoc} · v{doc.v1}.{doc.v2}.{doc.v3} · {lang}</div></div></div>
-          <button className="x" onClick={onClose} disabled={busy} aria-label="Close">✕</button>
+            <div><h3>{T.title}</h3><div className="mh"><b>{doc.docName}</b> · #{doc.idDoc} {tr('· v')}{doc.v1}.{doc.v2}.{doc.v3} · {lang}</div></div></div>
+          <button className="x" onClick={onClose} disabled={busy} aria-label={tr('Close')}>✕</button>
         </div>
 
         {needPwd && (
-          <label className="wf-pwd" style={{ textAlign: 'left' }}>Confirm with your password
-            <input ref={pwdRef} type="password" value={pwd} autoComplete="current-password" onChange={e => setPwd(e.target.value)} onKeyDown={e => e.key === 'Enter' && pwd && !loading && go()} /></label>)}
+          <label className="wf-pwd" style={{ textAlign: 'left' }}>{tr('Confirm with your password')}<input ref={pwdRef} type="password" value={pwd} autoComplete="current-password" onChange={e => setPwd(e.target.value)} onKeyDown={e => e.key === 'Enter' && pwd && !loading && go()} /></label>)}
 
         {loadErr && !noMail && (
-          <div className="mf-warn" role="alert">The e-mail draft could not be prepared: {loadErr}
-            <div><button className="btn-ghost" onClick={() => setNoMail(true)}>Continue without e-mail</button></div></div>)}
+          <div className="mf-warn" role="alert">{tr('The e-mail draft could not be prepared:')}{' '}{loadErr}
+            <div><button className="btn-ghost" onClick={() => setNoMail(true)}>{tr('Continue without e-mail')}</button></div></div>)}
 
-        {!loadErr && loading && <PageLoader compact label="Preparing the e-mail draft…" />}
+        {!loadErr && loading && <PageLoader compact label={tr('Preparing the e-mail draft…')} />}
 
         {!noMail && !loadErr && !loading && (
           <>
@@ -151,54 +151,53 @@ export default function MailFlowDialog({ kind, doc, lang, onClose, onDone }: {
 
             {cur && (
               <div className="mf-body">
-                {!smtpOk && <div className="mf-warn">The mail server is not set up, so e-mails cannot be sent from here. An administrator has to fill Config <code>smtpServer</code>, <code>smtpFrom</code> and <code>pop3login</code> / <code>pop3password</code>.</div>}
+                {!smtpOk && <div className="mf-warn">{tr('The mail server is not set up, so e-mails cannot be sent from here. An administrator has to fill Config')}{' '}<code>{tr('smtpServer')}</code>, <code>{tr('smtpFrom')}</code> {tr('and')}{' '}<code>{tr('pop3login')}</code> / <code>{tr('pop3password')}</code>.</div>}
 
                 <label className="mf-switch">
                   <input type="checkbox" checked={cur.send && smtpOk} disabled={!smtpOk} onChange={e => patch(tab, { send: e.target.checked })} />
                   <span className="sw" aria-hidden="true" />
-                  <span><b>Send e-mail notification</b>
-                    <small>{cur.send && smtpOk ? `From ${cur.draft.from}` : kind === 'relpub' ? 'No e-mail for this step.' : 'The step is done without sending an e-mail.'}</small></span>
+                  <span><b>{tr('Send e-mail notification')}</b>
+                    <small>{cur.send && smtpOk ? tr('From {0}', cur.draft.from) : kind === 'relpub' ? tr('No e-mail for this step.') : tr('The step is done without sending an e-mail.')}</small></span>
                 </label>
 
                 {cur.send && smtpOk && (
                   <>
                     {tab === 'publish' && cur.draft.quietUntil && (
-                      <div className="mf-note">E-mails are paused by a DB Tool setting. This one is sent automatically at {hhmm(cur.draft.quietUntil)}, after publishing.</div>)}
-                    {!cur.draft.hasTemplate && <div className="mf-note">No e-mail template was found for this language in table ApplicationEmail - a standard layout is used.</div>}
+                      <div className="mf-note">{tr('E-mails are paused by a DB Tool setting. This one is sent automatically at')}{' '}{hhmm(cur.draft.quietUntil)}{tr(', after publishing.')}</div>)}
+                    {!cur.draft.hasTemplate && <div className="mf-note">{tr('No e-mail template was found for this language in table ApplicationEmail - a standard layout is used.')}</div>}
 
                     <div className="mf-fields">
-                      <RecipientInput label="To" value={cur.to} onChange={v => patch(tab, { to: v })}
-                        hint="Distribution lists of the document and the default recipients" />
+                      <RecipientInput label={tr('To')} value={cur.to} onChange={v => patch(tab, { to: v })}
+                        hint={tr('Distribution lists of the document and the default recipients')} />
                       {showCc[tab] || cur.cc.length > 0
                         ? <RecipientInput label="CC" value={cur.cc} onChange={v => patch(tab, { cc: v })} />
-                        : <button type="button" className="mf-addcc" onClick={() => setShowCc(c => ({ ...c, [tab]: true }))}>＋ Add CC</button>}
-                      <label className="fld"><span>Subject</span>
+                        : <button type="button" className="mf-addcc" onClick={() => setShowCc(c => ({ ...c, [tab]: true }))}>{tr('＋ Add CC')}</button>}
+                      <label className="fld"><span>{tr('Subject')}</span>
                         <input value={cur.subject} maxLength={200} onChange={e => patch(tab, { subject: e.target.value })} /></label>
                     </div>
 
                     <div className="mf-edit-head">
-                      <div className="seg" role="tablist" aria-label="View">
-                        <button role="tab" aria-selected={mode === 'edit'} className={mode === 'edit' ? 'on' : ''} onClick={() => setMode('edit')}>✏️ Edit</button>
-                        <button role="tab" aria-selected={mode === 'preview'} className={mode === 'preview' ? 'on' : ''} onClick={() => setMode('preview')}>👁 Preview</button>
+                      <div className="seg" role="tablist" aria-label={tr('View')}>
+                        <button role="tab" aria-selected={mode === 'edit'} className={mode === 'edit' ? 'on' : ''} onClick={() => setMode('edit')}>{tr('✏️ Edit')}</button>
+                        <button role="tab" aria-selected={mode === 'preview'} className={mode === 'preview' ? 'on' : ''} onClick={() => setMode('preview')}>{tr('👁 Preview')}</button>
                       </div>
                       {mode === 'preview'
-                        ? <div className="seg" aria-label="Device">
-                            <button className={!phone ? 'on' : ''} onClick={() => setPhone(false)}>🖥 Desktop</button>
-                            <button className={phone ? 'on' : ''} onClick={() => setPhone(true)}>📱 Phone</button></div>
-                        : <div className="mf-layout">Layout
-                            <div className="seg">
-                              <button className={cur.layout === 'modern' ? 'on' : ''} title="Cards, colours and buttons"
-                                onClick={() => cur.layout !== 'modern' && patch(tab, { layout: 'modern', html: cur.draft.html, key: keyN.current++ })}>Modern</button>
-                              <button className={cur.layout === 'classic' ? 'on' : ''} title="The template as it is stored in the database"
-                                onClick={() => cur.layout !== 'classic' && patch(tab, { layout: 'classic', html: cur.draft.classicHtml, key: keyN.current++ })}>Classic</button></div>
-                            <button type="button" className="mf-reset" title="Discard all changes of the text"
-                              onClick={() => patch(tab, { html: cur.layout === 'modern' ? cur.draft.html : cur.draft.classicHtml, key: keyN.current++ })}>↺ Reset text</button></div>}
+                        ? <div className="seg" aria-label={tr('Device')}>
+                            <button className={!phone ? 'on' : ''} onClick={() => setPhone(false)}>{tr('🖥 Desktop')}</button>
+                            <button className={phone ? 'on' : ''} onClick={() => setPhone(true)}>{tr('📱 Phone')}</button></div>
+                        : <div className="mf-layout">{tr('Layout')}<div className="seg">
+                              <button className={cur.layout === 'modern' ? 'on' : ''} title={tr('Cards, colours and buttons')}
+                                onClick={() => cur.layout !== 'modern' && patch(tab, { layout: 'modern', html: cur.draft.html, key: keyN.current++ })}>{tr('Modern')}</button>
+                              <button className={cur.layout === 'classic' ? 'on' : ''} title={tr('The template as it is stored in the database')}
+                                onClick={() => cur.layout !== 'classic' && patch(tab, { layout: 'classic', html: cur.draft.classicHtml, key: keyN.current++ })}>{tr('Classic')}</button></div>
+                            <button type="button" className="mf-reset" title={tr('Discard all changes of the text')}
+                              onClick={() => patch(tab, { html: cur.layout === 'modern' ? cur.draft.html : cur.draft.classicHtml, key: keyN.current++ })}>{tr('↺ Reset text')}</button></div>}
                     </div>
 
                     {mode === 'edit'
                       ? <RichEditor key={`${tab}-${cur.key}`} html={cur.html} onChange={h => setSt(o => o[tab] ? { ...o, [tab]: { ...o[tab]!, html: h, touched: true } } : o)} />
-                      : <div className="mf-preview"><iframe title="E-mail preview" sandbox="" srcDoc={previewDoc} style={{ width: phone ? 390 : '100%' }} /></div>}
-                    <div className="mh">Type in the text blocks marked “Add a personal message” / “closing text”, or change anything else in the mail. The header and footer you write are remembered for this document.</div>
+                      : <div className="mf-preview"><iframe title={tr('E-mail preview')} sandbox="" srcDoc={previewDoc} style={{ width: phone ? 390 : '100%' }} /></div>}
+                    <div className="mh">{tr('Type in the text blocks marked “Add a personal message” / “closing text”, or change anything else in the mail. The header and footer you write are remembered for this document.')}</div>
                   </>)}
               </div>)}
           </>)}
@@ -208,12 +207,12 @@ export default function MailFlowDialog({ kind, doc, lang, onClose, onDone }: {
 
         <div className="modal-foot mf-foot">
           {!noMail && cur?.send && smtpOk && !loading
-            ? <button className="btn-ghost" onClick={test} disabled={busy || testing} title="Sends this draft to your own address only">{testing ? <><Spinner />Sending test…</> : '✉ Send me a test copy'}</button>
+            ? <button className="btn-ghost" onClick={test} disabled={busy || testing} title={tr('Sends this draft to your own address only')}>{testing ? <><Spinner />{tr('Sending test…')}</> : tr('✉ Send me a test copy')}</button>
             : <span />}
           <span className="mf-foot-r">
-            <button className="btn-ghost" onClick={onClose} disabled={busy}>Cancel</button>
+            <button className="btn-ghost" onClick={onClose} disabled={busy}>{tr('Cancel')}</button>
             <button className="btn-primary" style={{ width: 'auto' }} onClick={go} disabled={busy || loading || (needPwd && !pwd)}>
-              {busy ? <><Spinner />Please wait</> : (noMail || loadErr) ? T.button : label}</button>
+              {busy ? <><Spinner />{tr('Please wait')}</> : (noMail || loadErr) ? T.button : label}</button>
           </span>
         </div>
       </div>

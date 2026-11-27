@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { StatusBadge, ExtBadge, fmtDate } from './bits';
 import type { Msg } from './assistantEngine';
+import { tr } from '../i18n';
 
 /** Tiny markdown subset: **bold**, *italic*, `code`, "- " bullets, "1. " steps. */
 export function Md({ text }: { text: string }) {
@@ -48,17 +49,18 @@ export function MessageExtras({ m, go, ask, showFollow, busy }: { m: Msg; go: (t
         <button key={t.taskId} className="bot-doc" onClick={() => go('/tasks')}>
           <div className="bot-doc-top"><b>#{t.idDoc}</b><span className="bot-step">{t.layerName || t.step}</span></div>
           <div className="bot-doc-name">{t.docName}</div>
-          <div className="bot-doc-meta">{t.workflow} · {t.step}{t.due ? ` · due ${fmtDate(t.due)}` : ''}{t.overdue ? ' · overdue' : ''}</div>
+          <div className="bot-doc-meta">{t.workflow} · {t.step}{t.due ? tr(' · due {0}', fmtDate(t.due)) : ''}{t.overdue ? tr(' · overdue') : ''}</div>
         </button>))}</div>}
       {m.hits && m.hits.length > 0 && (
         <div className="bot-results">
           {m.hits.map(h => (
             <button key={`${h.idDoc}${h.lang}`} className="bot-doc hit" onClick={() => go(`/documents?doc=${h.idDoc}`)}>
-              <div className="bot-doc-top"><span className="bot-doc-id"><ExtBadge ext={h.ext} compact /><b>#{h.idDoc} · v{h.version}</b></span><StatusBadge id={h.status} name={h.statusName} /></div>
+              <div className="bot-doc-top"><span className="bot-doc-id"><ExtBadge ext={h.ext} compact /><b>#{h.idDoc} {tr('· v')}{h.version}</b></span><StatusBadge id={h.status} name={h.statusName} /></div>
               <div className="bot-doc-name">{h.docName}</div>
               {h.folder && <div className="bot-doc-meta">📁 {h.folder}</div>}
-              <div className="bot-snip"><Snip text={h.snippet} /></div>
-              <div className="bot-doc-meta">Click to open the folder and select this document</div>
+              {h.catchWords && h.catchWords.length > 0 && <div className="bot-doc-meta bot-catch">🏷 {tr('Catchword')}: {h.catchWords.slice(0, 5).map(w => <span key={w} className="bot-catch-chip">{w}</span>)}</div>}
+              {h.snippet && <div className="bot-snip"><Snip text={h.snippet} /></div>}
+              <div className="bot-doc-meta">{tr('Click to open the folder and select this document')}</div>
             </button>
           ))}
         </div>
@@ -67,7 +69,7 @@ export function MessageExtras({ m, go, ask, showFollow, busy }: { m: Msg; go: (t
         <div className="bot-results">
           {m.manual.map((h, i) => (
             <div key={i} className="bot-man">
-              <div className="bot-man-top"><span>📖 User manual</span><b>page {h.p}</b></div>
+              <div className="bot-man-top"><span>{tr('📖 User manual')}</span><b>{tr('page')}{' '}{h.p}</b></div>
               <div className="bot-man-h">{h.h}</div>
               <div className="bot-snip"><Snip text={h.snippet} /></div>
             </div>
@@ -83,17 +85,17 @@ export function MessageExtras({ m, go, ask, showFollow, busy }: { m: Msg; go: (t
               {d.paths && d.paths.length > 0 && (
                 <div className="bot-doc-path" title={d.paths.join('\n')}>
                   📁 {d.paths[0]!.split(' / ').map((p, j, a) => <span key={j}>{p}{j < a.length - 1 && <em> › </em>}</span>)}
-                  {d.paths.length > 1 && <small> +{d.paths.length - 1} more</small>}
+                  {d.paths.length > 1 && <small> +{d.paths.length - 1} {tr('more')}</small>}
                 </div>
               )}
               <div className="bot-doc-meta">
-                {d.publisher ? `Published by ${d.publisher}${d.datePub ? ' · ' + fmtDate(d.datePub) : ''}` : d.creator ? `Created by ${d.creator}` : ''}
-                {d.releaser ? ` · Released by ${d.releaser}` : ''}
+                {d.publisher ? tr('Published by {0}{1}', d.publisher, d.datePub ? ' · ' + fmtDate(d.datePub) : '') : d.creator ? tr('Created by {0}', d.creator) : ''}
+                {d.releaser ? tr(' · Released by {0}', d.releaser) : ''}
               </div>
             </button>
           ))}
           {m.query?.text && !m.query.creator && !m.query.publisher && !m.query.releaser && m.total! > m.docs.length && (
-            <button className="bot-more" onClick={() => go(`/documents?q=${encodeURIComponent(m.query!.text!)}`)}>Open all {m.total} in Documents →</button>
+            <button className="bot-more" onClick={() => go(`/documents?q=${encodeURIComponent(m.query!.text!)}`)}>{tr('Open all')}{' '}{m.total} {tr('in Documents →')}</button>
           )}
         </div>
       )}

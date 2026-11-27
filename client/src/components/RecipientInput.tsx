@@ -1,11 +1,12 @@
 import { useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api, type MailRecip } from '../api';
+import { tr } from '../i18n';
 
 export const isEmail = (s: string) => /^[^@\s,;<>]+@[^@\s,;<>]+\.[^@\s,;<>]{2,}$/.test(s.trim());
 
 const SRC: Record<string, string> = { default: 'Default recipient (DB Tool setting)', saved: 'Saved for this document', owner: 'Process owner', typed: 'Added by you', book: 'Address book' };
-const srcTitle = (s?: string) => !s ? '' : s.startsWith('list:') ? `Distribution list: ${s.slice(5)}` : SRC[s] ?? s;
+const srcTitle = (s?: string) => !s ? '' : s.startsWith('list:') ? tr('Distribution list: {0}', s.slice(5)) : SRC[s] ?? s;
 const srcClass = (s?: string) => !s ? '' : s.startsWith('list:') ? 'list' : s;
 
 /** To / CC field: addresses as chips, type or paste addresses, pick from the address book, or add a whole distribution list. */
@@ -52,11 +53,11 @@ export default function RecipientInput({ label, value, onChange, hint }: {
       <div className="rc-label"><span>{label}</span>{hint && <small>{hint}</small>}</div>
       <div className={`rc-box ${focus ? 'focus' : ''}`} onClick={() => inp.current?.focus()}>
         {value.map(v => (
-          <span key={v.email} className={`rc-chip ${srcClass(v.src)} ${isEmail(v.email) ? '' : 'bad'}`} title={isEmail(v.email) ? srcTitle(v.src) : 'Not a valid e-mail address'}>
+          <span key={v.email} className={`rc-chip ${srcClass(v.src)} ${isEmail(v.email) ? '' : 'bad'}`} title={isEmail(v.email) ? srcTitle(v.src) : tr('Not a valid e-mail address')}>
             {v.name ? <><b>{v.name}</b><i>{v.email}</i></> : v.email}
-            <button type="button" aria-label={`Remove ${v.email}`} onClick={e => { e.stopPropagation(); onChange(value.filter(x => x.email !== v.email)); }}>×</button>
+            <button type="button" aria-label={tr('Remove {0}', v.email)} onClick={e => { e.stopPropagation(); onChange(value.filter(x => x.email !== v.email)); }}>×</button>
           </span>))}
-        <input ref={inp} value={text} placeholder={value.length ? '' : 'Type an address or a name…'} aria-label={label}
+        <input ref={inp} value={text} placeholder={value.length ? '' : tr('Type an address or a name…')} aria-label={label}
           onChange={e => { setText(e.target.value); setHi(0); }}
           onFocus={() => setFocus(true)} onBlur={() => { setFocus(false); if (text.trim()) commit(text); }}
           onPaste={e => { const t = e.clipboardData.getData('text'); if (/[;,\s]/.test(t.trim())) { e.preventDefault(); commit(t); } }}
@@ -72,7 +73,7 @@ export default function RecipientInput({ label, value, onChange, hint }: {
           }} />
         {(lists.data?.items.length ?? 0) > 0 && (
           <button type="button" className="rc-lists" onMouseDown={e => e.preventDefault()} onClick={e => { e.stopPropagation(); setListsOpen(o => !o); }} aria-expanded={listsOpen}>
-            {busy ? '…' : '＋ List'}</button>)}
+            {busy ? '…' : tr('＋ List')}</button>)}
         {focus && matches.length > 0 && (
           <div className="rc-pop" role="listbox">
             {matches.map((c, i) => (
@@ -82,10 +83,10 @@ export default function RecipientInput({ label, value, onChange, hint }: {
           </div>)}
         {listsOpen && (
           <div className="rc-pop lists" role="menu">
-            <div className="rc-pop-h">Add all members of a distribution list</div>
+            <div className="rc-pop-h">{tr('Add all members of a distribution list')}</div>
             {lists.data?.items.map(l => (
               <button key={l.id} type="button" role="menuitem" onClick={e => { e.stopPropagation(); addList(l.id); }} disabled={busy || l.members === 0}>
-                <b>{l.name}</b><span>{l.members} member{l.members === 1 ? '' : 's'}</span></button>))}
+                <b>{l.name}</b><span>{l.members} {tr('member')}{l.members === 1 ? '' : 's'}</span></button>))}
           </div>)}
       </div>
     </div>

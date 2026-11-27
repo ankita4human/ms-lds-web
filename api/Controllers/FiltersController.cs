@@ -228,9 +228,13 @@ public class FiltersController(IConfiguration cfg) : ControllerBase
     public async Task<IActionResult> Options([FromQuery] string lang = "EN")
     {
         await using var con = Con();
-        var statuses = (await con.QueryAsync<IdName>("SELECT IDStatus AS Id, StatusDesc AS Name FROM [Status] WHERE Lang = @lang ORDER BY IDStatus", new { lang })).ToList();
-        if (!statuses.Any(x => x.Id == 11)) statuses.Add(new IdName { Id = 11, Name = "Frozen" });   // Frozen has no row in the Status table (manual p. 163: filter for Frozen)
-        var types = await con.QueryAsync<IdName>("SELECT IDType AS Id, REPLACE(TypeDesc, '<DE>', '') AS Name FROM DocTypes WHERE Lang = @lang AND IDType IS NOT NULL ORDER BY TypeDesc", new { lang });
+        var ui = Ui.Lang(Request);   // status and type names follow the interface language, the rest (accounts, folders) the document language
+        var statuses = (await con.QueryAsync<IdName>("SELECT IDStatus AS Id, StatusDesc AS Name FROM [Status] WHERE Lang = @ui ORDER BY IDStatus", new { ui })).ToList();
+        if (statuses.Count == 0) statuses = (await con.QueryAsync<IdName>("SELECT IDStatus AS Id, StatusDesc AS Name FROM [Status] WHERE Lang = @lang ORDER BY IDStatus", new { lang })).ToList();
+        if (!statuses.Any(x => x.Id == 11)) statuses.Add(new IdName { Id = 11, Name = Ui.Frozen(ui) });   // Frozen has no row in the Status table (manual p. 163: filter for Frozen)
+        var types = (await con.QueryAsync<IdName>(@"SELECT t.IDType AS Id, REPLACE(COALESCE(CASE WHEN LEFT(u.TypeDesc, 1) <> '<' THEN u.TypeDesc END, t.TypeDesc), '<DE>', '') AS Name
+            FROM DocTypes t OUTER APPLY (SELECT TOP 1 TypeDesc FROM DocTypes WHERE IDType = t.IDType AND Lang = @ui) u
+            WHERE t.Lang = @lang AND t.IDType IS NOT NULL", new { lang, ui })).OrderBy(x => x.Name, StringComparer.CurrentCultureIgnoreCase).ToList();
         var accounts = await con.QueryAsync<IdName>("SELECT IdAcc AS Id, AccShort AS Name FROM Accounts WHERE ISNULL(IsDeleted, 0) = 0 AND AccShort IS NOT NULL ORDER BY AccShort");
         var owners = await con.QueryAsync<IdName>("SELECT IdAcc AS Id, AccShort AS Name FROM Accounts WHERE ISNULL(IsDeleted, 0) = 0 AND ISNULL(IsProcessOwner, 0) = 1 AND AccShort IS NOT NULL ORDER BY AccShort");
         var lists = await con.QueryAsync<IdName>("SELECT IDML AS Id, Name FROM MailList WHERE IDML IS NOT NULL ORDER BY Name");

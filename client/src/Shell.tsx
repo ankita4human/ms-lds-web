@@ -12,15 +12,18 @@ import SkinSwitch from './components/SkinSwitch';
 import UserAvatar, { AvatarEditor } from './components/UserAvatar';
 import SimulateDialog from './components/SimulateDialog';
 import ViewStyle from './components/ViewStyle';
+import UiLangSwitch from './components/UiLangSwitch';
+import { t, useI18n, tr } from './i18n';
 import { IconChart, IconDash, IconDocs, IconFilter, IconGear, IconType, IconUsers, IconMail, IconLogout, IconSearch, IconStd, IconDep, IconFlow, IconTask, IconCatch, IconTag, IconSliders, IconSpark } from './components/Icons';
 
-const TITLES: Record<string, string> = { '/assistant': 'AI Assistant', '/tasks': 'My tasks', '/options/workflows': 'Workflow management', '/options/catch': 'Catch management', '/options/tags': 'Tags', '/options/program': 'Program options', '/': 'Dashboard', '/analytics': 'Analytics', '/documents': 'Documents' };
+const titleOf = (p: string) => ({ '/assistant': t('nav.assistant'), '/tasks': t('nav.tasks'), '/options/workflows': t('nav.workflows'), '/options/catch': t('nav.catch'), '/options/tags': t('nav.tags'), '/options/program': t('nav.program'), '/': t('nav.dashboard'), '/analytics': t('nav.analytics'), '/documents': t('nav.documents') } as Record<string, string>)[p];
 const KEY = 'pl_nav_collapsed';
 
 export default function Shell() {
   const nav = useNavigate();
   const loc = useLocation();
   const { lang, setLang, languages } = useLang();
+  const { locale } = useI18n();   // re-render when the interface language changes
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
   const stdOpt = useQuery({ queryKey: ['std-options'], queryFn: api.standardOptions, staleTime: 5 * 60_000 });
   const wfCfg = useQuery({ queryKey: ['wf-config'], queryFn: api.wfConfig, staleTime: 5 * 60_000 });
@@ -43,55 +46,56 @@ export default function Shell() {
   const signOut = () => { auth.clear(); nav('/login'); };
   const name = me.data?.accShort ?? '...';
   const fullName = me.data?.name || me.data?.accShort;
-  const role = me.data?.isAdmin ? 'Administrator' : 'User';
+  const role = me.data?.isAdmin ? t('role.admin') : t('role.user');
 
   return (
     <div className={`shell ${collapsed ? 'collapsed' : ''}`}>
       <TopProgress />
       <aside className="sidebar">
-        <div className="brand"><img src="/logo-lds.png" alt="" /><div className="txt"><b>MS LDS<sup>®</sup></b><small>Document management</small></div></div>
+        <div className="brand"><img src="/logo-lds.png" alt="" /><div className="txt"><b>{tr('MS LDS')}<sup>®</sup></b><small>{t('brand.sub')}</small></div></div>
         <div className="usercard">
           <AvatarEditor id={me.data?.idAcc} name={fullName} />
           <div className="txt"><div className="name">{name}</div><div className="role">{role}</div></div>
         </div>
         <nav className="nav">
-          <NavLink to="/" end title="Dashboard"><IconDash /><span className="txt">Dashboard</span></NavLink>
-          <NavLink to="/analytics" title="Analytics"><IconChart /><span className="txt">Analytics</span></NavLink>
-          <NavLink to="/documents" title="Documents"><IconDocs /><span className="txt">Documents</span></NavLink>
-          {wfCfg.data?.canUse && <NavLink to="/tasks" title="My tasks"><IconTask /><span className="txt">My tasks</span>{openTasks > 0 && <span className={`nav-badge ${wfCount.data?.overdue ? 'late' : ''}`} title={`${openTasks} open task(s)${wfCount.data?.overdue ? `, ${wfCount.data.overdue} overdue` : ''}`}>{openTasks > 99 ? '99+' : openTasks}</span>}</NavLink>}
-          <button className={`nav-group ${loc.pathname.startsWith('/options') ? 'open' : ''}`} onClick={() => setOptOpen(o => !o)} title="Options" aria-expanded={optOpen}>
-            <IconGear /><span className="txt">Options</span><span className="caret txt">{optOpen ? '▾' : '▸'}</span>
+          <NavLink to="/" end title={t('nav.dashboard')}><IconDash /><span className="txt">{t('nav.dashboard')}</span></NavLink>
+          <NavLink to="/analytics" title={t('nav.analytics')}><IconChart /><span className="txt">{t('nav.analytics')}</span></NavLink>
+          <NavLink to="/documents" title={t('nav.documents')}><IconDocs /><span className="txt">{t('nav.documents')}</span></NavLink>
+          {wfCfg.data?.canUse && <NavLink to="/tasks" title={t('nav.tasks')}><IconTask /><span className="txt">{t('nav.tasks')}</span>{openTasks > 0 && <span className={`nav-badge ${wfCount.data?.overdue ? 'late' : ''}`} title={tr('{0} open task(s){1}', openTasks, wfCount.data?.overdue ? `, ${wfCount.data.overdue} overdue` : '')}>{openTasks > 99 ? '99+' : openTasks}</span>}</NavLink>}
+          <button className={`nav-group ${loc.pathname.startsWith('/options') ? 'open' : ''}`} onClick={() => setOptOpen(o => !o)} title={t('nav.options')} aria-expanded={optOpen}>
+            <IconGear /><span className="txt">{t('nav.options')}</span><span className="caret txt">{optOpen ? '▾' : '▸'}</span>
           </button>
-          {optOpen && <NavLink className="sub" to="/options/filters" title="Filter management"><IconFilter /><span className="txt">Filter management</span></NavLink>}
-          {optOpen && <NavLink className="sub" to="/options/types" title="Type management"><IconType /><span className="txt">Type management</span></NavLink>}
-          {optOpen && stdOpt.data?.enabled && <NavLink className="sub" to="/options/standards" title="Standard management"><IconStd /><span className="txt">Standard management</span></NavLink>}
-          {optOpen && wfCfg.data?.canManage && <NavLink className="sub" to="/options/workflows" title="Workflow management"><IconFlow /><span className="txt">Workflow management</span></NavLink>}
-          {optOpen && catchCfg.data?.canManage && <NavLink className="sub" to="/options/catch" title="Catch management"><IconCatch /><span className="txt">Catch management</span></NavLink>}
-          {optOpen && <NavLink className="sub" to="/options/tags" title="Tags"><IconTag /><span className="txt">Tags</span></NavLink>}
-          {optOpen && <NavLink className="sub" to="/options/program" title="Program options"><IconSliders /><span className="txt">Program options</span></NavLink>}
+          {optOpen && <NavLink className="sub" to="/options/filters" title={t('nav.filters')}><IconFilter /><span className="txt">{t('nav.filters')}</span></NavLink>}
+          {optOpen && <NavLink className="sub" to="/options/types" title={t('nav.types')}><IconType /><span className="txt">{t('nav.types')}</span></NavLink>}
+          {optOpen && stdOpt.data?.enabled && <NavLink className="sub" to="/options/standards" title={t('nav.standards')}><IconStd /><span className="txt">{t('nav.standards')}</span></NavLink>}
+          {optOpen && wfCfg.data?.canManage && <NavLink className="sub" to="/options/workflows" title={t('nav.workflows')}><IconFlow /><span className="txt">{t('nav.workflows')}</span></NavLink>}
+          {optOpen && catchCfg.data?.canManage && <NavLink className="sub" to="/options/catch" title={t('nav.catch')}><IconCatch /><span className="txt">{t('nav.catch')}</span></NavLink>}
+          {optOpen && <NavLink className="sub" to="/options/tags" title={t('nav.tags')}><IconTag /><span className="txt">{t('nav.tags')}</span></NavLink>}
+          {optOpen && <NavLink className="sub" to="/options/program" title={t('nav.program')}><IconSliders /><span className="txt">{t('nav.program')}</span></NavLink>}
           {optOpen && (me.data?.isAdmin || me.data?.rights.includes(41)) && !simulation.active() && (
-            <button className="nav-sub-sim" onClick={() => setSimOpen(true)} title="Simulate profile: work as another user"><span className="sim-emo" aria-hidden>🎭</span><span className="txt">Simulate profile</span></button>)}
-          {optOpen && <NavLink className="sub" to="/options/dependency" title="Dependency"><IconDep /><span className="txt">Dependency</span></NavLink>}
-          {optOpen && <NavLink className="sub" to="/options/users" title="User management"><IconUsers /><span className="txt">User management</span></NavLink>}
-          {optOpen && <NavLink className="sub" to="/options/distribution" title="E-mail distribution"><IconMail /><span className="txt">E-mail distribution</span></NavLink>}
-          <NavLink to="/assistant" title="AI Assistant" className="nav-ai"><IconSpark /><span className="txt">AI Assistant</span><span className="nav-new txt">AI</span></NavLink>
+            <button className="nav-sub-sim" onClick={() => setSimOpen(true)} title={t('nav.simulateTip')}><span className="sim-emo" aria-hidden>🎭</span><span className="txt">{t('nav.simulate')}</span></button>)}
+          {optOpen && <NavLink className="sub" to="/options/dependency" title={t('nav.dependency')}><IconDep /><span className="txt">{t('nav.dependency')}</span></NavLink>}
+          {optOpen && <NavLink className="sub" to="/options/users" title={t('nav.users')}><IconUsers /><span className="txt">{t('nav.users')}</span></NavLink>}
+          {optOpen && <NavLink className="sub" to="/options/distribution" title={t('nav.distribution')}><IconMail /><span className="txt">{t('nav.distribution')}</span></NavLink>}
+          <NavLink to="/assistant" title={t('nav.assistant')} className="nav-ai"><IconSpark /><span className="txt">{t('nav.assistant')}</span><span className="nav-new txt">{tr('AI')}</span></NavLink>
         </nav>
-        <div className="foot"><img src="/logo-qf.png" alt="" /><span className="txt">MS QF GmbH</span></div>
+        <div className="foot"><img src="/logo-qf.png" alt="" /><span className="txt">{tr('MS QF GmbH')}</span></div>
       </aside>
       <div className="main">
-        {simulation.active() && <div className="sim-bar" role="status">Simulation: you are working as <b>{name}</b>. <button onClick={() => { simulation.stop(); location.assign('/options/users'); }}>Return to my account</button></div>}
-        <header className="topbar">
+        {simulation.active() && <div className="sim-bar" role="status">{t('sim.bar')} <b>{name}</b>. <button onClick={() => { simulation.stop(); location.assign('/options/users'); }}>{t('sim.return')}</button></div>}
+        <header className="topbar has-center">
           <div className="left">
-            <button className="burger" onClick={toggle} aria-label={collapsed ? 'Expand menu' : 'Collapse menu'} aria-expanded={!collapsed}>
+            <button className="burger" onClick={toggle} aria-label={collapsed ? t('head.menuExpand') : t('head.menuCollapse')} aria-expanded={!collapsed}>
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M4 6h16M4 12h16M4 18h10" /></svg>
             </button>
-            <h1>{TITLES[loc.pathname] ?? 'MS LDS'}</h1>
+            <h1>{titleOf(loc.pathname) ?? tr('MS LDS')}</h1>
             <form className="gsearch" role="search" onSubmit={e => { e.preventDefault(); if (q.trim()) nav(`/documents?q=${encodeURIComponent(q.trim())}`); }}>
-              <IconSearch /><input value={q} onChange={e => setQ(e.target.value)} placeholder="Search documents by name or ID..." aria-label="Search documents" />
+              <IconSearch /><input value={q} onChange={e => setQ(e.target.value)} placeholder={t('head.search')} aria-label={t('head.searchLabel')} />
             </form>
           </div>
+          <div className="center"><UiLangSwitch /></div>
           <div className="right">
-            <label className="lang-select">Language
+            <label className="lang-select" title={t('head.docLang')}>{t('head.docLang')}
               <select value={lang} onChange={e => setLang(e.target.value)} disabled={!languages.length}>
                 {languages.map(l => <option key={l.lang} value={l.lang}>{l.name ? `${l.name} (${l.lang})` : l.lang}</option>)}
               </select>
@@ -108,8 +112,8 @@ export default function Shell() {
               {menuOpen && (
                 <div className="profile-menu" role="menu">
                   <div className="pm-head"><AvatarEditor id={me.data?.idAcc} name={fullName} /><div><b>{name}</b><small>{role}</small></div></div>
-                  {me.data?.lastLogin && <div className="pm-meta">Last login: {new Date(me.data.lastLogin).toLocaleString('en-GB')}</div>}
-                  <button role="menuitem" onClick={signOut}><IconLogout /> Sign out</button>
+                  {me.data?.lastLogin && <div className="pm-meta">{t('head.lastLogin')}: {new Date(me.data.lastLogin).toLocaleString(locale)}</div>}
+                  <button role="menuitem" onClick={signOut}><IconLogout /> {t('head.signOut')}</button>
                 </div>
               )}
             </div>

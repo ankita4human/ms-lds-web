@@ -1,5 +1,6 @@
 import { useEffect, useId, useMemo, useState, type ReactNode } from 'react';
 import { Spinner } from './Loader';
+import { tr } from '../i18n';
 
 /** Toggle switch with an optional description line. */
 export function Switch({ checked, onChange, disabled, label, desc }: { checked: boolean; onChange: (v: boolean) => void; disabled?: boolean; label: ReactNode; desc?: ReactNode }) {
@@ -20,13 +21,13 @@ export function Pills({ options, value, onChange, disabled, label }: { options: 
   return (
     <div className="fx-field">
       <div className="fx-lbl">{label}<span className="fx-lbl-tools">
-        {value.length > 0 && <em>{value.length} selected</em>}
-        <button type="button" disabled={disabled} onClick={() => onChange(options.map(o => o.id))}>All</button>
-        <button type="button" disabled={disabled || value.length === 0} onClick={() => onChange([])}>None</button></span></div>
-      {options.length > 8 && <input className="fx-mini" placeholder={`Find in ${label.toLowerCase()}…`} value={q} onChange={e => setQ(e.target.value)} disabled={disabled} />}
+        {value.length > 0 && <em>{value.length} {tr('selected')}</em>}
+        <button type="button" disabled={disabled} onClick={() => onChange(options.map(o => o.id))}>{tr('All')}</button>
+        <button type="button" disabled={disabled || value.length === 0} onClick={() => onChange([])}>{tr('None')}</button></span></div>
+      {options.length > 8 && <input className="fx-mini" placeholder={tr('Find in {0}…', label.toLowerCase())} value={q} onChange={e => setQ(e.target.value)} disabled={disabled} />}
       <div className="fx-pills" role="group" aria-label={label}>
         {shown.map(o => <button type="button" key={o.id} className={value.includes(o.id) ? 'on' : ''} aria-pressed={value.includes(o.id)} disabled={disabled} onClick={() => toggle(o.id)}>{value.includes(o.id) && <span aria-hidden="true">✓ </span>}{o.name}</button>)}
-        {shown.length === 0 && <span className="fx-none">Nothing matches.</span>}
+        {shown.length === 0 && <span className="fx-none">{tr('Nothing matches.')}</span>}
       </div>
     </div>
   );
@@ -43,8 +44,8 @@ export function Combo({ label, options, value, onChange, disabled, placeholder }
     <div className="fx-field">
       <div className="fx-lbl">{label}</div>
       <div className={`fx-combo ${value ? 'set' : ''}`}>
-        <input list={listId} value={txt} disabled={disabled} placeholder={placeholder ?? 'Any'} onChange={e => { setTxt(e.target.value); const m = options.find(o => o.name === e.target.value); if (m) onChange(m.id); }} onBlur={e => commit(e.target.value)} />
-        {value !== undefined && !disabled && <button type="button" aria-label={`Clear ${label}`} onClick={() => { onChange(undefined); setTxt(''); }}>×</button>}
+        <input list={listId} value={txt} disabled={disabled} placeholder={placeholder ?? tr('Any')} onChange={e => { setTxt(e.target.value); const m = options.find(o => o.name === e.target.value); if (m) onChange(m.id); }} onBlur={e => commit(e.target.value)} />
+        {value !== undefined && !disabled && <button type="button" aria-label={tr('Clear {0}', label)} onClick={() => { onChange(undefined); setTxt(''); }}>×</button>}
         <datalist id={listId}>{options.map(o => <option key={o.id} value={o.name} />)}</datalist>
       </div>
     </div>
@@ -55,11 +56,11 @@ export function Combo({ label, options, value, onChange, disabled, placeholder }
 export function SaveBar({ dirty, busy, canSave, onSave, onReset, children }: { dirty: boolean; busy: boolean; canSave: boolean; onSave: () => void; onReset: () => void; children?: ReactNode }) {
   return (
     <div className={`fx-savebar ${dirty ? 'dirty' : ''}`}>
-      <span className="st">{dirty ? <><i className="dot" />Unsaved changes</> : <><span className="okmark">✓</span>All changes saved</>}</span>
+      <span className="st">{dirty ? <><i className="dot" />{tr('Unsaved changes')}</> : <><span className="okmark">✓</span>{tr('All changes saved')}</>}</span>
       <span className="act">
         {children}
-        <button className="btn-ghost" onClick={onReset} disabled={busy || !dirty}>Discard</button>
-        <button className="btn-primary" onClick={onSave} disabled={busy || !canSave || !dirty}>{busy ? <Spinner /> : <>Save <kbd>Ctrl+S</kbd></>}</button>
+        <button className="btn-ghost" onClick={onReset} disabled={busy || !dirty}>{tr('Discard')}</button>
+        <button className="btn-primary" onClick={onSave} disabled={busy || !canSave || !dirty}>{busy ? <Spinner /> : <>{tr('Save')}{' '}<kbd>{tr('Ctrl+S')}</kbd></>}</button>
       </span>
     </div>
   );

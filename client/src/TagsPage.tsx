@@ -7,6 +7,7 @@ import { PageLoader } from './components/Loader';
 import { IconTag } from './components/Icons';
 import PageHero from './components/PageHero';
 import Toast from './components/Toast';
+import { tr } from './i18n';
 
 type Kind = 'doc' | 'app' | 'other';
 
@@ -25,39 +26,39 @@ export default function TagsPage() {
 
   async function copy(name: string) {
     setSel(name);
-    try { await navigator.clipboard.writeText(name); setMsg({ ok: true, t: `${name} copied to the clipboard.` }); }
-    catch { setMsg({ ok: false, t: 'The browser did not allow copying. Select the tag and press Ctrl+C.' }); }
+    try { await navigator.clipboard.writeText(name); setMsg({ ok: true, t: tr('{0} copied to the clipboard.', name) }); }
+    catch { setMsg({ ok: false, t: tr('The browser did not allow copying. Select the tag and press Ctrl+C.') }); }
   }
-  if (q.isLoading) return <PageLoader label="Loading tags" />;
+  if (q.isLoading) return <PageLoader label={tr('Loading tags')} />;
   const d = q.data;
   const items = d?.items ?? [];
   return (
     <div className="um">
-      <PageHero icon={<IconTag />} title="Tags" sub={`Tags are replaced by the current values when a document is published, previewed, viewed or printed (${lang})`}
+      <PageHero icon={<IconTag />} title={tr('Tags')} sub={tr('Tags are replaced by the current values when a document is published, previewed, viewed or printed ({0})', lang)}
         chips={[{ n: items.length, label: 'tags' }]} />
       <div className="card" style={{ padding: 16 }}>
-        <div className="tag-kind" role="radiogroup" aria-label="Tag type">
-          <label className="fm-chk"><input type="radio" name="tk" checked={kind === 'doc'} onChange={() => setKind('doc')} /><span>Document Level Tags</span></label>
-          <label className="fm-chk"><input type="radio" name="tk" checked={kind === 'app'} onChange={() => setKind('app')} /><span>Application Level Tags</span></label>
-          <label className={`fm-chk ${d?.otherEnabled ? '' : 'off'}`} title={d?.otherEnabled ? '' : 'Available when another product of the MS QDS family with tags is installed.'}>
-            <input type="radio" name="tk" checked={kind === 'other'} disabled={!d?.otherEnabled} onChange={() => { setKind('other'); setApp(0); }} /><span>Other Application Tags/Links</span></label>
+        <div className="tag-kind" role="radiogroup" aria-label={tr('Tag type')}>
+          <label className="fm-chk"><input type="radio" name="tk" checked={kind === 'doc'} onChange={() => setKind('doc')} /><span>{tr('Document Level Tags')}</span></label>
+          <label className="fm-chk"><input type="radio" name="tk" checked={kind === 'app'} onChange={() => setKind('app')} /><span>{tr('Application Level Tags')}</span></label>
+          <label className={`fm-chk ${d?.otherEnabled ? '' : 'off'}`} title={d?.otherEnabled ? '' : tr('Available when another product of the MS QDS family with tags is installed.')}>
+            <input type="radio" name="tk" checked={kind === 'other'} disabled={!d?.otherEnabled} onChange={() => { setKind('other'); setApp(0); }} /><span>{tr('Other Application Tags/Links')}</span></label>
           {kind === 'other' && d && (
-            <select value={app} onChange={e => setApp(Number(e.target.value))} aria-label="Product">
-              <option value={0}>All</option>{d.products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select>)}
+            <select value={app} onChange={e => setApp(Number(e.target.value))} aria-label={tr('Product')}>
+              <option value={0}>{tr('All')}</option>{d.products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select>)}
         </div>
         {q.error && <div className="alert">{(q.error as Error).message}</div>}
-        {items.length === 0 && !q.error && <div className="mh" style={{ padding: 12 }}>{kind === 'app' ? 'No application level tags yet. Create them under Options → Program options → Admin.' : 'No tags found.'}</div>}
+        {items.length === 0 && !q.error && <div className="mh" style={{ padding: 12 }}>{kind === 'app' ? tr('No application level tags yet. Create them under Options → Program options → Admin.') : tr('No tags found.')}</div>}
         {items.length > 0 && (
           <div className="um-scroll">
-            <table className="grid-table tag-tbl"><thead><tr><th>Tag Name</th><th>Description</th>{kind === 'app' && <th>Replacement</th>}</tr></thead>
+            <table className="grid-table tag-tbl"><thead><tr><th>{tr('Tag Name')}</th><th>{tr('Description')}</th>{kind === 'app' && <th>{tr('Replacement')}</th>}</tr></thead>
               <tbody>{items.map(t => (
                 <tr key={`${t.app}-${t.id}-${t.name}`} className={sel === t.name ? 'sel' : ''} onClick={() => copy(t.name)} onDoubleClick={() => copy(t.name)} style={{ cursor: 'pointer' }}>
                   <td><code>{t.name}</code></td><td>{t.description}</td>{kind === 'app' && <td>{t.value}</td>}</tr>))}</tbody></table>
           </div>)}
-        <small className="mh">Select a tag: it is copied to the clipboard. Paste it into the document in edit mode; it is replaced after the document is published.</small>
+        <small className="mh">{tr('Select a tag: it is copied to the clipboard. Paste it into the document in edit mode; it is replaced after the document is published.')}</small>
         <div className="modal-foot" style={{ marginTop: 10 }}>
-          <button className="btn-primary" disabled={!sel} onClick={() => sel && copy(sel)}>Copy Tag</button>
-          <button className="btn-ghost" onClick={() => nav('/documents')}>Close</button>
+          <button className="btn-primary" disabled={!sel} onClick={() => sel && copy(sel)}>{tr('Copy Tag')}</button>
+          <button className="btn-ghost" onClick={() => nav('/documents')}>{tr('Close')}</button>
         </div>
       </div>
       <Toast msg={msg} onClose={() => setMsg(null)} />

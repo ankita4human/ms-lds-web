@@ -1,51 +1,76 @@
 import type { ReactNode } from 'react';
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Legend, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import type { Stat } from '../api';
+import { tr } from '../i18n';
 
 export const PALETTE = ['#1b5fa7', '#c8851f', '#16a34a', '#7c3aed', '#e11d48', '#0891b2', '#f59e0b', '#64748b', '#db2777', '#4f46e5'];
 
 export function ChartCard({ title, hint, children }: { title: string; hint?: string; children: ReactNode }) {
-  return <div className="card"><h3>{title}</h3>{hint && <div className="hint">{hint}</div>}<div className="chart">{children}</div></div>;
+  return (
+    <div className="card">
+      <div className="card-head"><div><h3>{title}</h3>{hint && <div className="hint">{hint}</div>}</div><span className="dots">•••</span></div>
+      <div className="chart">{children}</div>
+    </div>
+  );
 }
-const Empty = () => <div className="empty">No data</div>;
+const Empty = () => <div className="empty">{tr('No data')}</div>;
 
+const AXIS = { tickLine: false, axisLine: false, tick: { fill: '#98a2b3', fontSize: 12 } } as const;
+const TIP = { contentStyle: { borderRadius: 10, border: '1px solid #e4e7ec', boxShadow: '0 6px 20px rgba(30,60,120,.12)', fontSize: 13 } };
+const BLUE = '#2f6df6';
+
+/** Ring with the total in the centre and a legend: same look as the dashboard status card. */
 export function Donut({ data }: { data: Stat[] }) {
   if (!data.length) return <Empty />;
+  const total = data.reduce((n, x) => n + x.count, 0) || 1;
   return (
-    <ResponsiveContainer>
-      <PieChart>
-        <Pie data={data} dataKey="count" nameKey="label" innerRadius="55%" outerRadius="80%" paddingAngle={2}>
-          {data.map((_, i) => <Cell key={i} fill={PALETTE[i % PALETTE.length]} />)}
-        </Pie>
-        <Tooltip /><Legend verticalAlign="bottom" height={36} />
-      </PieChart>
-    </ResponsiveContainer>
+    <div className="donut-wrap">
+      <div className="donut-box">
+        <ResponsiveContainer>
+          <PieChart>
+            <Pie data={data} dataKey="count" nameKey="label" innerRadius="68%" outerRadius="92%" paddingAngle={2} stroke="none">
+              {data.map((_, i) => <Cell key={i} fill={PALETTE[i % PALETTE.length]} />)}
+            </Pie>
+            <Tooltip {...TIP} />
+          </PieChart>
+        </ResponsiveContainer>
+        <div className="donut-center"><b>{total}</b><small>{tr('Documents')}</small></div>
+      </div>
+      <div className="legend">
+        {data.slice(0, 6).map((x, i) => (
+          <div key={x.label}><i style={{ borderColor: PALETTE[i % PALETTE.length] }} /><span>{x.label}</span><b>{Math.round((x.count / total) * 100)}%</b></div>
+        ))}
+      </div>
+    </div>
   );
 }
 
-/** Horizontal bars: good for long labels such as document types or user names. */
-export function HBars({ data, color = PALETTE[0] }: { data: Stat[]; color?: string }) {
+/** Horizontal bars with a soft track: good for long labels such as document types or user names. */
+export function HBars({ data, color = BLUE }: { data: Stat[]; color?: string }) {
   if (!data.length) return <Empty />;
   return (
     <ResponsiveContainer>
       <BarChart data={data} layout="vertical" margin={{ left: 8, right: 16 }}>
-        <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-        <XAxis type="number" allowDecimals={false} />
-        <YAxis type="category" dataKey="label" width={130} tick={{ fontSize: 12 }} />
-        <Tooltip /><Bar dataKey="count" fill={color} radius={[0, 6, 6, 0]} />
+        <CartesianGrid stroke="#eef1f6" horizontal={false} />
+        <XAxis type="number" allowDecimals={false} {...AXIS} />
+        <YAxis type="category" dataKey="label" width={130} {...AXIS} tick={{ fill: '#475467', fontSize: 12 }} />
+        <Tooltip {...TIP} cursor={{ fill: '#f5f7fb' }} />
+        <Bar dataKey="count" fill={color} radius={[4, 4, 4, 4]} barSize={14} background={{ fill: '#eef1f6', radius: 4 }} />
       </BarChart>
     </ResponsiveContainer>
   );
 }
 
-export function Columns({ data, color = PALETTE[0] }: { data: Stat[]; color?: string }) {
+export function Columns({ data, color = BLUE }: { data: Stat[]; color?: string }) {
   if (!data.length) return <Empty />;
   return (
     <ResponsiveContainer>
       <BarChart data={data}>
-        <CartesianGrid strokeDasharray="3 3" vertical={false} />
-        <XAxis dataKey="label" tick={{ fontSize: 12 }} /><YAxis allowDecimals={false} />
-        <Tooltip /><Bar dataKey="count" fill={color} radius={[6, 6, 0, 0]}>
+        <CartesianGrid stroke="#eef1f6" vertical={false} />
+        <XAxis dataKey="label" {...AXIS} />
+        <YAxis allowDecimals={false} {...AXIS} />
+        <Tooltip {...TIP} cursor={{ fill: '#f5f7fb' }} />
+        <Bar dataKey="count" fill={color} radius={[4, 4, 0, 0]} barSize={22}>
           {data.map((_, i) => <Cell key={i} fill={color === 'multi' ? PALETTE[i % PALETTE.length] : color} />)}
         </Bar>
       </BarChart>

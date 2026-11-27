@@ -10,7 +10,7 @@ namespace PhaseLift.Api.Controllers;
 /// PDF and pictures are streamed as they are so the browser's own viewer shows them; Word, Excel, PowerPoint, OpenDocument,
 /// text and legacy Office files are turned into one self-contained HTML page. ?download=true saves it instead of showing it.
 [ApiController, Route("api/lds/documents"), Authorize]
-public class DocPreviewController(IConfiguration cfg) : ControllerBase
+public class DocPreviewController(IConfiguration cfg, DocConverter conv, DocPublisher publisher, ILogger<DocPreviewController> log) : ControllerBase
 {
     int Acc => int.Parse(User.FindFirstValue("idAcc")!);
 
@@ -61,9 +61,40 @@ public class DocPreviewController(IConfiguration cfg) : ControllerBase
         if (!HtmlPreview.Convertible.Contains(lowered) && lowered is not (".html" or ".htm"))
             return StatusCode(415, new { error = $"A {(ext.Length > 0 ? ext : "this")} file cannot be shown in the browser. Download it and open it with its program." });
         var title = doc.DocName ?? $"Document {id}";
-        var page = await Task.Run(() => HtmlPreview.Convert(path, title));
-        var htmlName = safe + ".html"; Response.Headers["X-File-Name"] = Uri.EscapeDataString(htmlName);
-        Response.Headers.ContentDisposition = $"{(download ? "attachment" : "inline")}; filename*=UTF-8''{Uri.EscapeDataString(htmlName)}";
-        return Content(page, "text/html; charset=utf-8");
+
+        // Word / Excel / PowerPoint (and the legacy / OpenDocument formats): show the real layout, like the published copy does.
+        // A temporary copy gets the tags ($Ausgabestand$ ...) replaced and is turned into a PDF by Office or LibreOffice; the browser's PDF viewer shows it.
+        // The plain-text page below is only the fallback when neither is installed on the server.
+        var work = path; string? tmpDir = null;
+        try
+        {
+            var kind = DocConverter.KindOf(ext);
+            if (!download && kind is DocKind.Word or DocKind.Excel or DocKind.PowerPoint || (!download && lowered is ".odt" or ".ods" or ".odp" or ".rtf"))
+            {
+                tmpDir = Path.Combine(Path.GetTempPath(), "pl-prev-" + Guid.NewGuid().ToString("N"));
+                Directory.CreateDirectory(tmpDir);
+                work = Path.Combine(tmpDir, $"D{id}{ext}");
+                System.IO.File.Copy(path, work, true);
+                if (TagReplacer.Supports(ext))
+                {
+                    try { TagReplacer.ReplaceInFile(work, await publisher.MailTags(id, lang, new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase))); }
+                    catch (Exception ex) { log.LogWarning(ex, "Tags of {Id} were not replaced in the preview", id); }
+                }
+                try
+                {
+                    var pdf = await conv.MakePdf(work, kind == DocKind.Other ? DocKind.Word : kind, Path.Combine(tmpDir, $"D{id}.pdf"));
+                    var bytes = await System.IO.File.ReadAllBytesAsync(pdf);
+                    var pdfName = safe + ".pdf"; Response.Headers["X-File-Name"] = Uri.EscapeDataString(pdfName);
+                    Response.Headers.ContentDisposition = $"inline; filename*=UTF-8''{Uri.EscapeDataString(pdfName)}";
+                    return File(bytes, "application/pdf");
+                }
+                catch (Exception ex) { log.LogWarning(ex, "PDF preview of D{Id} failed, the text preview is shown instead", id); }
+            }
+            var page = await Task.Run(() => HtmlPreview.Convert(work, title));
+            var htmlName = safe + ".html"; Response.Headers["X-File-Name"] = Uri.EscapeDataString(htmlName);
+            Response.Headers.ContentDisposition = $"{(download ? "attachment" : "inline")}; filename*=UTF-8''{Uri.EscapeDataString(htmlName)}";
+            return Content(page, "text/html; charset=utf-8");
+        }
+        finally { if (tmpDir is not null) try { Directory.Delete(tmpDir, true); } catch { /* temp folder */ } }
     }
 }

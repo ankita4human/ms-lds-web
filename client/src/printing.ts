@@ -1,5 +1,6 @@
 import type { GroupReport, DocRow } from './api';
 import { api } from './api';
+import { tr } from './i18n';
 
 const esc = (s: unknown) => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c] as string));
 const day = (s?: string) => (s ? new Date(s).toLocaleDateString('en-GB') : '-');
@@ -26,7 +27,7 @@ export function printGroupReport(r: GroupReport): boolean {
   const head = '<tr><th>ID</th><th>Document</th><th>Type</th><th>Version</th><th>Author</th><th>Created</th><th>Editor</th><th>Modified</th><th>Publisher</th><th>Published</th></tr>';
   const body = r.sections.map(s => `<h2>${esc(s.path)}</h2>` + (s.docs.length === 0 ? '<div class="none">No documents</div>'
     : `<table>${head}${s.docs.map(d => `<tr><td>${d.idDoc}</td><td>${esc(d.name)}</td><td>${esc(d.type)}</td><td>${esc(d.version)}</td><td>${esc(d.author ?? '-')}</td><td>${day(d.created)}</td><td>${esc(d.editor ?? '-')}</td><td>${day(d.modified)}</td><td>${esc(d.publisher ?? '-')}</td><td>${day(d.published)}</td></tr>`).join('')}</table>`)).join('');
-  return openPage(`Print list ${r.title}`, `${r.documents} document(s) · ${r.lang} · ${new Date(r.generated).toLocaleString('en-GB')}`, body);
+  return openPage(tr('Print list {0}', r.title), tr('{0} document(s) · {1} · {2}', r.documents, r.lang, new Date(r.generated).toLocaleString('en-GB')), body);
 }
 
 /** Every document of a saved filter, page by page (the list endpoint returns at most 200 per call). */
@@ -42,7 +43,7 @@ export async function allFilterDocs(filterId: number, lang: string): Promise<Doc
 
 export function printFilterReport(name: string, docs: DocRow[]): boolean {
   const rows = docs.map(d => `<tr><td>${d.idDoc}</td><td>${esc(d.docName)}</td><td>${esc(d.statusName)}</td><td>${esc(d.typeName)}</td><td>${ver(d)}</td><td>${esc(d.creator ?? '-')}</td><td>${day(d.dateCre)}</td><td>${esc(d.publisher ?? '-')}</td><td>${day(d.datePub)}</td><td>${day(d.dateExp)}</td></tr>`).join('');
-  return openPage(`Filter report ${name}`, `${docs.length} document(s) · ${new Date().toLocaleString('en-GB')}`,
+  return openPage(tr('Filter report {0}', name), tr('{0} document(s) · {1}', docs.length, new Date().toLocaleString('en-GB')),
     `<table><tr><th>ID</th><th>Document</th><th>Status</th><th>Type</th><th>Version</th><th>Creator</th><th>Created</th><th>Publisher</th><th>Published</th><th>Expires</th></tr>${rows}</table>`);
 }
 

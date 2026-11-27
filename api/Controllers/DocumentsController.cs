@@ -65,13 +65,15 @@ public class DocumentsController(IConfiguration cfg) : ControllerBase
 
     internal const string SelectColumns = @"
 SELECT d.IDDoc, d.DocName, d.Lang, d.LangStandard, d.[Status],
-       ISNULL(s.StatusDesc, CASE d.[Status] WHEN 11 THEN 'Frozen' ELSE CONCAT('Status ', d.[Status]) END) AS StatusName, d.[Type],
-       REPLACE(ISNULL(t.TypeDesc, CONCAT('Type ', d.[Type])), '<DE>', '') AS TypeName,
+       ISNULL(su.StatusDesc, ISNULL(s.StatusDesc, CASE d.[Status] WHEN 11 THEN @frozen ELSE CONCAT('Status ', d.[Status]) END)) AS StatusName, d.[Type],
+       REPLACE(COALESCE(CASE WHEN LEFT(tu.TypeDesc, 1) <> '<' THEN tu.TypeDesc END, t.TypeDesc, CONCAT('Type ', d.[Type])), '<DE>', '') AS TypeName,
        d.V1, d.V2, d.V3, d.Extension, d.DateCre, d.DateMod, d.DateExp, d.DatePub, d.DateRel, CAST(ISNULL(d.DoNotExpire, 0) AS bit) AS DoNotExpire, CAST(ISNULL(d.IsCycle, 0) AS bit) AS IsCycle, CAST(ISNULL(d.DoNotPublish, 0) AS bit) AS DoNotPublish,
        cre.AccShort AS Creator, pub.AccShort AS Publisher, rel.AccShort AS Releaser
 FROM Documents d
 OUTER APPLY (SELECT TOP 1 StatusDesc FROM [Status] WHERE IDStatus = d.[Status] AND Lang = d.Lang) s
+OUTER APPLY (SELECT TOP 1 StatusDesc FROM [Status] WHERE IDStatus = d.[Status] AND Lang = @ui) su
 OUTER APPLY (SELECT TOP 1 TypeDesc FROM DocTypes WHERE IDType = d.[Type] AND Lang = d.Lang) t
+OUTER APPLY (SELECT TOP 1 TypeDesc FROM DocTypes WHERE IDType = d.[Type] AND Lang = @ui) tu
 LEFT JOIN Accounts cre ON cre.IdAcc = d.IdCre
 LEFT JOIN Accounts pub ON pub.IdAcc = d.IdPub
 LEFT JOIN Accounts rel ON rel.IdAcc = d.IdRel";
@@ -112,7 +114,7 @@ LEFT JOIN Accounts rel ON rel.IdAcc = d.IdRel";
         tScope = sw.ElapsedMilliseconds;
         var where = "WHERE ISNULL(d.LAIgnore, 0) = 0 AND " + vis
             + (string.IsNullOrWhiteSpace(lang) ? "" : " AND d.Lang = @lang")
-            + (string.IsNullOrWhiteSpace(text) ? "" : " AND (d.DocName LIKE @text ESCAPE '\\' OR CAST(d.IDDoc AS nvarchar(20)) = @raw)")
+            + (string.IsNullOrWhiteSpace(text) ? "" : " AND (d.DocName LIKE @text ESCAPE '\\' OR CAST(d.IDDoc AS nvarchar(20)) = @raw OR " + AutoCatch.MatchSql("d", "@catchw", "d.Lang") + ")")
             + (type is null ? "" : " AND d.[Type] = @type")
             + (status is null ? "" : " AND d.[Status] = @status")
             + (expired ? " AND " + ExpiredPredicate : "")
@@ -132,7 +134,7 @@ LEFT JOIN Accounts rel ON rel.IdAcc = d.IdRel";
         }
         var p0 = new
         {
-            acc, lang, type, status, raw = text?.Trim(),
+            acc, lang, type, status, raw = text?.Trim(), catchw = text?.Trim().ToLowerInvariant(), ui = Ui.Lang(Request), frozen = Ui.Frozen(Ui.Lang(Request)),
             creator = Like(creator), publisher = Like(publisher), releaser = Like(releaser),
             text = text is null ? null : "%" + text.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_") + "%",
             skip = (page - 1) * pageSize, take = pageSize
@@ -144,6 +146,19 @@ LEFT JOIN Accounts rel ON rel.IdAcc = d.IdRel";
             + (string.IsNullOrWhiteSpace(publisher) ? "" : " LEFT JOIN Accounts pub ON pub.IdAcc = d.IdPub")
             + (string.IsNullOrWhiteSpace(releaser) ? "" : " LEFT JOIN Accounts rel ON rel.IdAcc = d.IdRel");
         var dir = desc ? "DESC" : "ASC"; sw.Restart();
+        // The total is asked on its own connection at the same time as the page is read (it used to start only after the page was done);
+        // it is cancelled when the page turns out to be short, because then the total is known without it.
+        var countSql = $"{AccessCte} SELECT COUNT(*) FROM Documents d {countJoins} {where} OPTION (MAXRECURSION 100)";
+        var countKey = $"cnt:{GroupCache.TreeKey(0, "")}:{countSql.GetHashCode()}:{lang}:{type}:{status}:{p0.raw}:{creator}:{publisher}:{releaser}";
+        using var cancelCount = new CancellationTokenSource();
+        Task<int>? countTask = null;
+        if (filterId is null)
+            countTask = Access.Cached(countKey, TimeSpan.FromSeconds(20), async () =>
+            {
+                await using var con2 = new SqlConnection(cfg.GetConnectionString("Lds"));
+                return await con2.ExecuteScalarAsync<int>(new CommandDefinition(countSql, new DynamicParameters(p0), cancellationToken: cancelCount.Token)   /* own parameter object: the page query is using p at the same time */);
+            });
+
         // Fast path: sort and filter on the Documents table alone, cut the page FIRST, and only then look up status, type and
         // account names for those (at most 200) rows. The old statement joined and sorted everything before taking the page.
         var simple = filterId is null && countJoins.Length == 0 && sort is not ("type" or "status" or "creator");
@@ -152,8 +167,8 @@ LEFT JOIN Accounts rel ON rel.IdAcc = d.IdRel";
         {
             items = await con.QueryAsync<DocumentRow>($@"
 SELECT d.IDDoc, d.DocName, d.Lang, d.LangStandard, d.[Status],
-       ISNULL(s.StatusDesc, CASE d.[Status] WHEN 11 THEN 'Frozen' ELSE CONCAT('Status ', d.[Status]) END) AS StatusName, d.[Type],
-       REPLACE(ISNULL(t.TypeDesc, CONCAT('Type ', d.[Type])), '<DE>', '') AS TypeName,
+       ISNULL(su.StatusDesc, ISNULL(s.StatusDesc, CASE d.[Status] WHEN 11 THEN @frozen ELSE CONCAT('Status ', d.[Status]) END)) AS StatusName, d.[Type],
+       REPLACE(COALESCE(CASE WHEN LEFT(tu.TypeDesc, 1) <> '<' THEN tu.TypeDesc END, t.TypeDesc, CONCAT('Type ', d.[Type])), '<DE>', '') AS TypeName,
        d.V1, d.V2, d.V3, d.Extension, d.DateCre, d.DateMod, d.DateExp, d.DatePub, d.DateRel, CAST(ISNULL(d.DoNotExpire, 0) AS bit) AS DoNotExpire, CAST(ISNULL(d.IsCycle, 0) AS bit) AS IsCycle, CAST(ISNULL(d.DoNotPublish, 0) AS bit) AS DoNotPublish,
        cre.AccShort AS Creator, pub.AccShort AS Publisher, rel.AccShort AS Releaser
 FROM (SELECT d.IDDoc, d.DocName, d.Lang, d.LangStandard, d.[Status], d.[Type], d.V1, d.V2, d.V3, d.Extension, d.DateCre, d.DateMod, d.DateExp, d.DatePub, d.DateRel,
@@ -162,7 +177,9 @@ FROM (SELECT d.IDDoc, d.DocName, d.Lang, d.LangStandard, d.[Status], d.[Type], d
       ORDER BY {col} {dir}, d.IDDoc
       OFFSET @skip ROWS FETCH NEXT @take ROWS ONLY) d
 OUTER APPLY (SELECT TOP 1 StatusDesc FROM [Status] WHERE IDStatus = d.[Status] AND Lang = d.Lang) s
+OUTER APPLY (SELECT TOP 1 StatusDesc FROM [Status] WHERE IDStatus = d.[Status] AND Lang = @ui) su
 OUTER APPLY (SELECT TOP 1 TypeDesc FROM DocTypes WHERE IDType = d.[Type] AND Lang = d.Lang) t
+OUTER APPLY (SELECT TOP 1 TypeDesc FROM DocTypes WHERE IDType = d.[Type] AND Lang = @ui) tu
 LEFT JOIN Accounts cre ON cre.IdAcc = d.IdCre
 LEFT JOIN Accounts pub ON pub.IdAcc = d.IdPub
 LEFT JOIN Accounts rel ON rel.IdAcc = d.IdRel
@@ -180,16 +197,13 @@ OPTION (MAXRECURSION 100)", p);
         var rows = items.ToList(); tRows = sw.ElapsedMilliseconds; sw.Restart();
         // The count is only needed when the page is full (or empty beyond page 1): a short page tells the total by itself.
         int total;
-        if (rows.Count < pageSize && (rows.Count > 0 || page == 1)) total = (page - 1) * pageSize + rows.Count;
-        else
+        if (rows.Count < pageSize && (rows.Count > 0 || page == 1))
         {
-            var countSql = $"{AccessCte} SELECT COUNT(*) FROM Documents d {countJoins} {where} OPTION (MAXRECURSION 100)";
-            // The same question is asked again for every page and every revisit: remember the answer for a short time.
-            // (Not for saved filters: their parameters are not part of the key.)
-            total = filterId is not null ? await con.ExecuteScalarAsync<int>(countSql, p)
-                : await Access.Cached($"cnt:{GroupCache.TreeKey(0, "")}:{countSql.GetHashCode()}:{lang}:{type}:{status}:{p0.raw}:{creator}:{publisher}:{releaser}", TimeSpan.FromSeconds(20),
-                    () => con.ExecuteScalarAsync<int>(countSql, p));
+            total = (page - 1) * pageSize + rows.Count;
+            cancelCount.Cancel();
+            if (countTask is not null) { try { await countTask; } catch { /* cancelled: not needed */ } }
         }
+        else total = countTask is not null ? await countTask : await con.ExecuteScalarAsync<int>(countSql, p);   // saved filters: not cached (their parameters are not in the key)
         tCount = sw.ElapsedMilliseconds;
         var totalMs = tScope + tRows + tCount;
         Response.Headers["Server-Timing"] = $"scope;dur={tScope}, rows;dur={tRows}, count;dur={tCount}";
@@ -222,7 +236,7 @@ OPTION (MAXRECURSION 100)", p);
         var acc = int.Parse(User.FindFirstValue("idAcc")!);
         await using var con = new SqlConnection(cfg.GetConnectionString("Lds"));
         var vis = await Access.VisibleSql(con, acc, lang);
-        var p = new { acc, id, lang };
+        var ui = Ui.Lang(Request); var p = new { acc, id, lang, ui, frozen = Ui.Frozen(ui) };
         var doc = await con.QueryFirstOrDefaultAsync<DocumentRow>($@"{AccessCte}
             {SelectColumns} WHERE d.IDDoc = @id AND d.Lang = @lang AND {vis}", p);
         if (doc is null) return NotFound();

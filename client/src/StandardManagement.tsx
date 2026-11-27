@@ -9,6 +9,7 @@ import ContextMenu, { type MenuItem } from './components/ContextMenu';
 import PageHero from './components/PageHero';
 import Toast, { type ToastMsg } from './components/Toast';
 import { IconDocs } from './components/Icons';
+import { tr } from './i18n';
 
 /** Options > Standard management (manual p. 62-66): standards and their chapters as a tree. Right click on the root: Add New / Import;
  *  on a standard: Add chapter, Mandatory, Remove. Select a node to edit it in the right panel. */
@@ -83,18 +84,18 @@ export default function StandardManagement() {
 
   function startNew(p: number) { setParent(p); setSel('new'); setF(EMPTY); setAssocId(0); if (p) setOpen(o => new Set(o).add(p)); }
   const save = () => run(async () => {
-    if (!f.name.trim()) throw new Error('Please enter a name.');
-    if (sel === 'new') { const r = await api.createStandard(body()); await refresh(); setSel(r.id); setMsg({ ok: true, t: isRoot ? 'Standard added.' : 'Chapter added.' }); }
+    if (!f.name.trim()) throw new Error(tr('Please enter a name.'));
+    if (sel === 'new') { const r = await api.createStandard(body()); await refresh(); setSel(r.id); setMsg({ ok: true, t: isRoot ? tr('Standard added.') : tr('Chapter added.') }); }
     else if (typeof sel === 'number') {
       await api.updateStandard(sel, body());
       if (!isRoot && assocId !== (cur?.association ?? 0)) await api.linkStdAssociation(sel, assocId);
-      await refresh(); setMsg({ ok: true, t: 'Saved.' });
+      await refresh(); setMsg({ ok: true, t: tr('Saved.') });
     }
   });
   const remove = (n: StdNode) => run(async () => {
     const r = await api.removeStandard(n.id); await refresh(); setAskDel(null);
     if (sel === n.id) setSel(null);
-    setMsg({ ok: true, t: r.removed > 1 ? `Removed with ${r.removed - 1} chapter(s).` : 'Removed.' });
+    setMsg({ ok: true, t: r.removed > 1 ? tr('Removed with {0} chapter(s).', r.removed - 1) : tr('Removed.') });
   });
   const addAssoc = () => run(async () => {
     const n = newAssoc.trim(); if (!n) return;
@@ -102,11 +103,11 @@ export default function StandardManagement() {
   });
 
   function ctxItems(n: StdNode | null): MenuItem[] {
-    if (!n) return [{ key: 'new', label: 'Add New', icon: '➕', enabled: can }, { key: 'import', label: 'Import from file…', icon: '📥', enabled: can }, { key: 'mand', label: 'Mandatory Standards…', icon: '⭐', enabled: can }];
+    if (!n) return [{ key: 'new', label: tr('Add New'), icon: '➕', enabled: can }, { key: 'import', label: tr('Import from file…'), icon: '📥', enabled: can }, { key: 'mand', label: tr('Mandatory Standards…'), icon: '⭐', enabled: can }];
     const root = n.parent === 0;
     return [
-      { key: 'chapter', label: root ? 'Add chapter' : 'Add sub-chapter', icon: '➕', enabled: can },
-      { key: 'remove', label: 'Remove', icon: '🗑️', enabled: can, sepBefore: true },
+      { key: 'chapter', label: root ? tr('Add chapter') : tr('Add sub-chapter'), icon: '➕', enabled: can },
+      { key: 'remove', label: tr('Remove'), icon: '🗑️', enabled: can, sepBefore: true },
     ];
   }
   function pick(k: string, n: StdNode | null) {
@@ -127,9 +128,9 @@ export default function StandardManagement() {
           <span className="tw" onClick={e => { e.stopPropagation(); if (ch.length) toggle(n.id); }}>{ch.length ? (isOpen ? '▾' : '▸') : ''}</span>
           <span aria-hidden="true" style={{ marginRight: 6 }}>{n.parent === 0 || ch.length ? (isOpen ? '📂' : '📁') : '📄'}</span>
           <span className="nm" title={n.name}>{n.chapterNo ? `${n.chapterNo} ` : ''}{n.name}{n.shortName ? ` (${n.shortName})` : ''}</span>
-          {n.mandatory && <span title="Mandatory standard" style={{ marginRight: 4 }}>⭐</span>}
-          {n.inActive && <span className="mh" title="Inactive">⏸</span>}
-          {n.documents > 0 && <span className="ct" title="Linked documents">{n.documents}</span>}
+          {n.mandatory && <span title={tr('Mandatory standard')} style={{ marginRight: 4 }}>⭐</span>}
+          {n.inActive && <span className="mh" title={tr('Inactive')}>⏸</span>}
+          {n.documents > 0 && <span className="ct" title={tr('Linked documents')}>{n.documents}</span>}
         </div>
         {isOpen && ch.map(c => renderNode(c, depth + 1))}
       </div>
@@ -140,68 +141,67 @@ export default function StandardManagement() {
 
   return (
     <div className="um">
-      <PageHero icon={<IconDocs />} title="Standard management" sub="Standards, chapters and mandatory standards"
+      <PageHero icon={<IconDocs />} title={tr('Standard management')} sub={tr('Standards, chapters and mandatory standards')}
         chips={[{ n: roots.length, label: 'standards' }, { n: nodes.length - roots.length, label: 'chapters' }, { n: mandCount, label: 'mandatory' }]} />
       <div className="fm" style={{ gridTemplateColumns: '380px 1fr' }}>
         <div className="card fm-list" onContextMenu={e => { e.preventDefault(); setMenu({ x: e.clientX, y: e.clientY, node: null }); }}>
-          <div className="fm-list-head"><b>{tree.data?.rootName ?? 'Standards'}</b>
-            <span><button className="ico-btn add" title="Add new standard" aria-label="Add new standard" onClick={() => startNew(0)} disabled={!can}>＋</button>
-              <button className="ico-btn" title="Mandatory standards" aria-label="Mandatory standards" onClick={() => setMandDlg(true)}>⭐</button>
-              <button className="ico-btn" title="Import standard from file" aria-label="Import standard" onClick={() => setImp(true)} disabled={!can}>📥</button></span>
+          <div className="fm-list-head"><b>{tree.data?.rootName ?? tr('Standards')}</b>
+            <span><button className="ico-btn add" title={tr('Add new standard')} aria-label={tr('Add new standard')} onClick={() => startNew(0)} disabled={!can}>＋</button>
+              <button className="ico-btn" title={tr('Mandatory standards')} aria-label={tr('Mandatory standards')} onClick={() => setMandDlg(true)}>⭐</button>
+              <button className="ico-btn" title={tr('Import standard from file')} aria-label={tr('Import standard')} onClick={() => setImp(true)} disabled={!can}>📥</button></span>
           </div>
-          <input className="fm-search" value={q} onChange={e => setQ(e.target.value)} placeholder="Search standards and chapters…" aria-label="Search standards"
+          <input className="fm-search" value={q} onChange={e => setQ(e.target.value)} placeholder={tr('Search standards and chapters…')} aria-label={tr('Search standards')}
             style={{ width: 'calc(100% - 16px)', margin: '0 8px 8px', padding: '8px 10px', border: '1px solid #d0d5dd', borderRadius: 10, font: 'inherit' }} />
-          {tree.isLoading && <PageLoader compact label="Loading standards" />}
+          {tree.isLoading && <PageLoader compact label={tr('Loading standards')} />}
           {roots.map(r => renderNode(r, 0))}
-          {tree.data && roots.length === 0 && <div className="mh" style={{ padding: 10 }}>No standards yet. Right click here and choose Add New, or import a file.</div>}
-          {shown && shown.size === 0 && <div className="mh" style={{ padding: 10 }}>Nothing found.</div>}
+          {tree.data && roots.length === 0 && <div className="mh" style={{ padding: 10 }}>{tr('No standards yet. Right click here and choose Add New, or import a file.')}</div>}
+          {shown && shown.size === 0 && <div className="mh" style={{ padding: 10 }}>{tr('Nothing found.')}</div>}
         </div>
 
         <div className="card fm-edit">
-          {sel === null ? <div className="mh" style={{ padding: 20 }}>Select a standard on the left, or right click and choose Add New.{!can && ' You may view the standards but not change them (right "Standards management").'}</div> : (
-            <fieldset className="fm-box"><legend>{sel === 'new' ? (isRoot ? 'New standard' : `New chapter in ${byId.get(parent)?.name ?? ''}`) : isRoot ? 'Standard' : 'Chapter'}</legend>
+          {sel === null ? <div className="mh" style={{ padding: 20 }}>{tr('Select a standard on the left, or right click and choose Add New.')}{!can && tr(' You may view the standards but not change them (right "Standards management").')}</div> : (
+            <fieldset className="fm-box"><legend>{sel === 'new' ? (isRoot ? tr('New standard') : tr('New chapter in {0}', byId.get(parent)?.name ?? '')) : isRoot ? tr('Standard') : tr('Chapter')}</legend>
               <div className="fm-top">
                 <div className="fm-fields">
-                  <label className="fm-row">Name<input value={f.name} maxLength={240} onChange={e => setF({ ...f, name: e.target.value })} disabled={!can} /></label>
+                  <label className="fm-row">{tr('Name')}<input value={f.name} maxLength={240} onChange={e => setF({ ...f, name: e.target.value })} disabled={!can} /></label>
                   {isRoot
-                    ? <label className="fm-row">Short name<input value={f.shortName} maxLength={5} onChange={e => setF({ ...f, shortName: e.target.value })} disabled={!can} /></label>
-                    : <label className="fm-row">Chapter No<input value={f.chapterNo} maxLength={20} onChange={e => setF({ ...f, chapterNo: e.target.value })} disabled={!can} /></label>}
-                  <label className="fm-row">Description<textarea rows={5} value={f.description} onChange={e => setF({ ...f, description: e.target.value })} disabled={!can}
+                    ? <label className="fm-row">{tr('Short name')}<input value={f.shortName} maxLength={5} onChange={e => setF({ ...f, shortName: e.target.value })} disabled={!can} /></label>
+                    : <label className="fm-row">{tr('Chapter No')}<input value={f.chapterNo} maxLength={20} onChange={e => setF({ ...f, chapterNo: e.target.value })} disabled={!can} /></label>}
+                  <label className="fm-row">{tr('Description')}<textarea rows={5} value={f.description} onChange={e => setF({ ...f, description: e.target.value })} disabled={!can}
                     style={{ padding: '8px 10px', border: '1px solid #d0d5dd', borderRadius: 10, font: 'inherit', resize: 'vertical' }} /></label>
-                  {isRoot && sel !== 'new' && <div className="fm-row">Status<label className="fm-chk"><input type="checkbox" checked={f.inActive} disabled={!can} onChange={e => setF({ ...f, inActive: e.target.checked })} />Inactive</label></div>}
+                  {isRoot && sel !== 'new' && <div className="fm-row">{tr('Status')}<label className="fm-chk"><input type="checkbox" checked={f.inActive} disabled={!can} onChange={e => setF({ ...f, inActive: e.target.checked })} />{tr('Inactive')}</label></div>}
                   {!isRoot && typeof sel === 'number' && (
-                    <div className="fm-row">Linked standards
-                      <span style={{ display: 'grid', gap: 6 }}>
+                    <div className="fm-row">{tr('Linked standards')}<span style={{ display: 'grid', gap: 6 }}>
                         <select value={assocId} onChange={e => setAssocId(Number(e.target.value))} disabled={!can}>
-                          <option value={0}>— not linked —</option>
+                          <option value={0}>{tr('— not linked —')}</option>
                           {assoc.data?.map(a => <option key={a.id} value={a.id}>{a.name} ({a.chapters})</option>)}
                         </select>
-                        {can && <span style={{ display: 'flex', gap: 6 }}><input value={newAssoc} onChange={e => setNewAssoc(e.target.value)} placeholder="New link group…" maxLength={200}
+                        {can && <span style={{ display: 'flex', gap: 6 }}><input value={newAssoc} onChange={e => setNewAssoc(e.target.value)} placeholder={tr('New link group…')} maxLength={200}
                           style={{ flex: 1, padding: '6px 10px', border: '1px solid #d0d5dd', borderRadius: 10, font: 'inherit' }} />
-                          <button className="btn-ghost" onClick={addAssoc} disabled={busy || !newAssoc.trim()}>Add</button></span>}
-                        <small className="mh">Chapters of different standards with the same link group belong together.</small>
+                          <button className="btn-ghost" onClick={addAssoc} disabled={busy || !newAssoc.trim()}>{tr('Add')}</button></span>}
+                        <small className="mh">{tr('Chapters of different standards with the same link group belong together.')}</small>
                       </span>
                     </div>)}
-                  {typeof sel === 'number' && cur?.untranslated && <small className="mh">Not translated into {lang} yet: the text starts with a language marker. Replace it and save to translate.</small>}
+                  {typeof sel === 'number' && cur?.untranslated && <small className="mh">{tr('Not translated into')}{' '}{lang} {tr('yet: the text starts with a language marker. Replace it and save to translate.')}</small>}
                 </div>
                 <div className="fm-btns">
-                  {isRoot && <button className="btn-ghost" onClick={() => setMandDlg(true)} disabled={busy}>Mandatory Standards</button>}
-                  <button className="btn-primary" onClick={save} disabled={busy || !can}>{busy ? <Spinner /> : 'Save'}</button>
-                  {typeof sel === 'number' && cur && <button className="btn-ghost" onClick={() => startNew(cur.id)} disabled={busy || !can}>Add chapter</button>}
-                  {typeof sel === 'number' && cur && <button className="btn-ghost" onClick={() => setAskDel(cur)} disabled={busy || !can}>Remove</button>}
-                  <button className="btn-ghost" onClick={() => nav('/documents')}>Close</button>
+                  {isRoot && <button className="btn-ghost" onClick={() => setMandDlg(true)} disabled={busy}>{tr('Mandatory Standards')}</button>}
+                  <button className="btn-primary" onClick={save} disabled={busy || !can}>{busy ? <Spinner /> : tr('Save')}</button>
+                  {typeof sel === 'number' && cur && <button className="btn-ghost" onClick={() => startNew(cur.id)} disabled={busy || !can}>{tr('Add chapter')}</button>}
+                  {typeof sel === 'number' && cur && <button className="btn-ghost" onClick={() => setAskDel(cur)} disabled={busy || !can}>{tr('Remove')}</button>}
+                  <button className="btn-ghost" onClick={() => nav('/documents')}>{tr('Close')}</button>
                 </div>
               </div>
             </fieldset>)}
-          {cur && <small className="mh">{cur.documents} document(s) are linked to this node. A node can be removed even when it has documents, as long as they are also linked to another node (manual p. 157). Changes apply to all languages.</small>}
+          {cur && <small className="mh">{cur.documents} {tr('document(s) are linked to this node. A node can be removed even when it has documents, as long as they are also linked to another node (manual p. 157). Changes apply to all languages.')}</small>}
         </div>
       </div>
       {menu && <ContextMenu x={menu.x} y={menu.y} items={ctxItems(menu.node)} onPick={k => pick(k, menu.node)} onClose={() => setMenu(null)} />}
-      {askDel && <ConfirmDialog danger title="Remove standard?" confirmLabel="Remove" busy={busy}
-        message={<><b>{askDel.name}</b>{(kids.get(askDel.id)?.length ?? 0) > 0 && <> and its {kids.get(askDel.id)!.length} chapter(s)</>} will be removed in all languages. Documents that are linked only to this node block the removal.</>}
+      {askDel && <ConfirmDialog danger title={tr('Remove standard?')} confirmLabel={tr('Remove')} busy={busy}
+        message={<><b>{askDel.name}</b>{(kids.get(askDel.id)?.length ?? 0) > 0 && <> {tr('and its')}{' '}{kids.get(askDel.id)!.length} {tr('chapter(s)')}</>} {tr('will be removed in all languages. Documents that are linked only to this node block the removal.')}</>}
         onConfirm={() => remove(askDel)} onCancel={() => setAskDel(null)} />}
       {imp && <ImportDialog lang={lang} onClose={() => setImp(false)} onDone={async (m) => { setImp(false); await refresh(); setMsg({ ok: true, t: m }); }} />}
-      {mandDlg && <MandatoryDialog roots={roots} can={can} onClose={() => setMandDlg(false)} onDone={async n => { setMandDlg(false); await refresh(); setMsg({ ok: true, t: `${n} mandatory standard(s) saved.` }); }} />}
+      {mandDlg && <MandatoryDialog roots={roots} can={can} onClose={() => setMandDlg(false)} onDone={async n => { setMandDlg(false); await refresh(); setMsg({ ok: true, t: tr('{0} mandatory standard(s) saved.', n) }); }} />}
       <Toast msg={msg} onClose={() => setMsg(null)} />
     </div>
   );
@@ -218,51 +218,51 @@ function ImportDialog({ lang, onClose, onDone }: { lang: string; onClose: () => 
     setErr(''); setFile(f.name); setRows([]); setInfo(null); setXl(null);
     if (/\.xlsx$/i.test(f.name)) {   // the Excel template: one sheet per language (Standard_EN, Standard_DE, ...)
       setBusy(true);
-      try { const i = await api.importStandardXlsx(f, false, lang); setInfo(i); setXl(f); if (i.duplicate) setErr('A standard with this name already exists.'); }
+      try { const i = await api.importStandardXlsx(f, false, lang); setInfo(i); setXl(f); if (i.duplicate) setErr(tr('A standard with this name already exists.')); }
       catch (x) { setErr((x as Error).message); } finally { setBusy(false); }
       return;
     }
-    if (/\.xls$/i.test(f.name)) { setErr('Old .xls files are not supported. Save the sheet as .xlsx (the template) or as CSV.'); return; }
+    if (/\.xls$/i.test(f.name)) { setErr(tr('Old .xls files are not supported. Save the sheet as .xlsx (the template) or as CSV.')); return; }
     const r = parseChapters(await f.text()); setRows(r);
-    if (!r.length) setErr('No chapters found. The file needs the columns: Chapter No, Name, Description.');
+    if (!r.length) setErr(tr('No chapters found. The file needs the columns: Chapter No, Name, Description.'));
     if (!name) setName(f.name.replace(/\.[^.]+$/, ''));
   }
   async function go() {
     setBusy(true); setErr('');
     try {
-      if (xl) { const r = await api.importStandardXlsx(xl, true, lang); onDone(`Standard imported with ${r.chapters} chapter(s) in ${r.languages.join(', ')}.`); }
-      else { const r = await api.importStandard({ lang, name: name.trim(), shortName: short.trim(), rows }); onDone(`Standard imported with ${r.chapters} chapter(s).`); }
+      if (xl) { const r = await api.importStandardXlsx(xl, true, lang); onDone(tr('Standard imported with {0} chapter(s) in {1}.', r.chapters, r.languages.join(', '))); }
+      else { const r = await api.importStandard({ lang, name: name.trim(), shortName: short.trim(), rows }); onDone(tr('Standard imported with {0} chapter(s).', r.chapters)); }
     } catch (e) { setErr((e as Error).message); setBusy(false); }
   }
   return (
     <div className="modal-back" onMouseDown={() => !busy && onClose()}>
-      <div className="modal grp-dlg" style={{ width: 600 }} role="dialog" aria-modal="true" aria-label="Import standard" onMouseDown={e => e.stopPropagation()}>
-        <div className="modal-head"><div><h3 style={{ margin: 0 }}>Import standard</h3><div className="mh">Excel template (.xlsx, one sheet per language) or CSV</div></div><button className="x" onClick={onClose} disabled={busy} aria-label="Close">✕</button></div>
+      <div className="modal grp-dlg" style={{ width: 600 }} role="dialog" aria-modal="true" aria-label={tr('Import standard')} onMouseDown={e => e.stopPropagation()}>
+        <div className="modal-head"><div><h3 style={{ margin: 0 }}>{tr('Import standard')}</h3><div className="mh">{tr('Excel template (.xlsx, one sheet per language) or CSV')}</div></div><button className="x" onClick={onClose} disabled={busy} aria-label={tr('Close')}>✕</button></div>
         <div style={{ display: 'grid', gap: 10, padding: '4px 2px' }}>
           <div><input type="file" accept=".xlsx,.csv,.txt,.tsv" onChange={onFile} disabled={busy} /> {file && <small className="mh">{file}</small>}</div>
-          {busy && <div><Spinner /> Reading…</div>}
+          {busy && <div><Spinner /> {tr('Reading…')}</div>}
           {info && (
             <div className="fm-ok">
-              <b>{info.name}</b> — {info.chapters} chapter(s)<br />
-              Languages in the file: {info.languages.join(', ')}.
-              {info.missing.length > 0 && <> {info.missing.join(', ')} have no sheet: their text is taken from the first sheet and marked until translated.</>}
-              {info.ignored.length > 0 && <> Sheets of inactive languages ({info.ignored.join(', ')}) are skipped.</>}
+              <b>{info.name}</b> — {info.chapters} {tr('chapter(s)')}<br />
+              {tr('Languages in the file:')}{' '}{info.languages.join(', ')}.
+              {info.missing.length > 0 && <> {info.missing.join(', ')} {tr('have no sheet: their text is taken from the first sheet and marked until translated.')}</>}
+              {info.ignored.length > 0 && <> {tr('Sheets of inactive languages (')}{info.ignored.join(', ')}{tr(') are skipped.')}</>}
             </div>)}
           {!info && (<>
-            <label className="fm-row" style={{ gridTemplateColumns: '120px 1fr' }}>Standard name<input value={name} maxLength={240} onChange={e => setName(e.target.value)} /></label>
-            <label className="fm-row" style={{ gridTemplateColumns: '120px 1fr' }}>Short name<input value={short} maxLength={5} onChange={e => setShort(e.target.value)} /></label>
+            <label className="fm-row" style={{ gridTemplateColumns: '120px 1fr' }}>{tr('Standard name')}<input value={name} maxLength={240} onChange={e => setName(e.target.value)} /></label>
+            <label className="fm-row" style={{ gridTemplateColumns: '120px 1fr' }}>{tr('Short name')}<input value={short} maxLength={5} onChange={e => setShort(e.target.value)} /></label>
           </>)}
           {rows.length > 0 && (
             <div style={{ maxHeight: 220, overflow: 'auto', border: '1px solid var(--line)', borderRadius: 10 }}>
-              <table className="tbl" style={{ width: '100%', fontSize: 13 }}><thead><tr><th>No</th><th>Name</th></tr></thead>
+              <table className="tbl" style={{ width: '100%', fontSize: 13 }}><thead><tr><th>{tr('No')}</th><th>{tr('Name')}</th></tr></thead>
                 <tbody>{rows.slice(0, 200).map((r, i) => <tr key={i}><td>{r.chapterNo}</td><td>{r.name}</td></tr>)}</tbody></table>
             </div>)}
-          {rows.length > 0 && <small className="mh">{rows.length} chapter(s). A chapter number such as 4.1.2 is placed below 4.1 (or 4), the others below the standard.</small>}
+          {rows.length > 0 && <small className="mh">{rows.length} {tr('chapter(s). A chapter number such as 4.1.2 is placed below 4.1 (or 4), the others below the standard.')}</small>}
           {err && <div className="alert" role="alert">{err}</div>}
         </div>
         <div className="modal-foot">
-          <button className="btn-ghost" onClick={onClose} disabled={busy}>Close</button>
-          <button className="btn-primary" style={{ width: 'auto' }} onClick={go} disabled={busy || (info ? info.duplicate : (!name.trim() || rows.length === 0))}>{busy ? <Spinner /> : 'Save'}</button>
+          <button className="btn-ghost" onClick={onClose} disabled={busy}>{tr('Close')}</button>
+          <button className="btn-primary" style={{ width: 'auto' }} onClick={go} disabled={busy || (info ? info.duplicate : (!name.trim() || rows.length === 0))}>{busy ? <Spinner /> : tr('Save')}</button>
         </div>
       </div>
     </div>
@@ -281,24 +281,24 @@ function MandatoryDialog({ roots, can, onClose, onDone }: { roots: StdNode[]; ca
   }
   return (
     <div className="modal-back" onMouseDown={() => !busy && onClose()}>
-      <div className="modal grp-dlg" style={{ width: 520 }} role="dialog" aria-modal="true" aria-label="Mandatory standards" onMouseDown={e => e.stopPropagation()}>
-        <div className="modal-head"><div><h3 style={{ margin: 0 }}>Mandatory Standards</h3><div className="mh">Documents must be linked to the selected standards before they are released</div></div><button className="x" onClick={onClose} disabled={busy} aria-label="Close">✕</button></div>
+      <div className="modal grp-dlg" style={{ width: 520 }} role="dialog" aria-modal="true" aria-label={tr('Mandatory standards')} onMouseDown={e => e.stopPropagation()}>
+        <div className="modal-head"><div><h3 style={{ margin: 0 }}>{tr('Mandatory Standards')}</h3><div className="mh">{tr('Documents must be linked to the selected standards before they are released')}</div></div><button className="x" onClick={onClose} disabled={busy} aria-label={tr('Close')}>✕</button></div>
         <div style={{ maxHeight: 340, overflow: 'auto', border: '1px solid var(--line)', borderRadius: 10 }}>
           <table className="tbl" style={{ width: '100%' }}>
-            <thead><tr><th style={{ width: 70 }}>Select</th><th>Name of Standard</th></tr></thead>
+            <thead><tr><th style={{ width: 70 }}>{tr('Select')}</th><th>{tr('Name of Standard')}</th></tr></thead>
             <tbody>
               {roots.map(r => (
                 <tr key={r.id} onClick={() => can && !busy && flip(r.id)} style={{ cursor: can ? 'pointer' : 'default' }}>
-                  <td><input type="checkbox" checked={sel.has(r.id)} disabled={!can || busy} onChange={() => flip(r.id)} onClick={e => e.stopPropagation()} aria-label={`Mandatory: ${r.name}`} /></td>
+                  <td><input type="checkbox" checked={sel.has(r.id)} disabled={!can || busy} onChange={() => flip(r.id)} onClick={e => e.stopPropagation()} aria-label={tr('Mandatory: {0}', r.name)} /></td>
                   <td>{r.name}</td>
                 </tr>))}
-              {roots.length === 0 && <tr><td colSpan={2} className="mh">No standards yet.</td></tr>}
+              {roots.length === 0 && <tr><td colSpan={2} className="mh">{tr('No standards yet.')}</td></tr>}
             </tbody>
           </table>
         </div>
         {err && <div className="alert" role="alert">{err}</div>}
         <div className="modal-foot">
-          <button className="btn-ghost" onClick={onClose} disabled={busy}>Cancel</button>
+          <button className="btn-ghost" onClick={onClose} disabled={busy}>{tr('Cancel')}</button>
           <button className="btn-primary" style={{ width: 'auto' }} onClick={ok} disabled={busy || !can}>{busy ? <Spinner /> : 'OK'}</button>
         </div>
       </div>

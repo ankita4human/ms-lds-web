@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { tr } from '../i18n';
 
 export type ToastMsg = { ok: boolean; t: string } | null;
 
@@ -26,9 +27,9 @@ export default function Toast({ msg, onClose, ms = 3500 }: { msg: ToastMsg; onCl
         <span className="mb-ico" aria-hidden>{ok
           ? <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path className="mb-tick" d="M5 12.5l4.5 4.5L19 7.5" /></svg>
           : <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><path d="M12 5.5v8M12 18v.5" /></svg>}</span>
-        <h3>{ok ? 'Success' : 'Something went wrong'}</h3>
+        <h3>{ok ? tr('Success') : tr('Something went wrong')}</h3>
         <p>{shown.t}</p>
-        <button className="mb-ok" onClick={onClose} autoFocus>{ok ? 'OK' : 'Close'}</button>
+        <button className="mb-ok" onClick={onClose} autoFocus>{ok ? 'OK' : tr('Close')}</button>
         {ok && <i className="mb-bar" style={{ animationDuration: `${ms}ms` }} />}
       </div>
     </div>

@@ -1,4 +1,5 @@
 import type { DocRow } from '../api';
+import { tr } from '../i18n';
 
 const STATUS_COLORS: Record<number, [string, string]> = {
   1: ['#eef2f6', '#475467'], 2: ['#fff4e0', '#b25e09'], 3: ['#e3f8ea', '#15803d'], 4: ['#e0f7f4', '#0f766e'],
@@ -42,7 +43,7 @@ export function FileIcon({ ext, size = 30 }: { ext?: string; size?: number }) {
   const id = `fi${i.key || 'x'}${i.name}`.replace(/[^a-z0-9]/gi, '');
   const long = i.glyph.length > 1;
   return (
-    <svg className="fx-svg" width={Math.round(size * 0.82)} height={size} viewBox="0 0 28 34" role="img" aria-label={`${i.name} file`}>
+    <svg className="fx-svg" width={Math.round(size * 0.82)} height={size} viewBox="0 0 28 34" role="img" aria-label={tr('{0} file', i.name)}>
       <defs><linearGradient id={id} x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor={i.c1} /><stop offset="1" stopColor={i.c2} /></linearGradient></defs>
       <path d="M4 .5h13.2L27.5 10.8V30a3.5 3.5 0 0 1-3.5 3.5H4A3.5 3.5 0 0 1 .5 30V4A3.5 3.5 0 0 1 4 .5z" fill={`url(#${id})`} />
       <path d="M17.2.5v6.3a4 4 0 0 0 4 4h6.3z" fill="#fff" opacity=".38" />

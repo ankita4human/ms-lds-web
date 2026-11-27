@@ -1,9 +1,10 @@
 import { useIsFetching, useIsMutating } from '@tanstack/react-query';
+import { tr } from '../i18n';
 
 /** Thin animated bar at the very top of the window while any request is running. */
 export function TopProgress() {
   const busy = useIsFetching() + useIsMutating() > 0;
-  return <div className={`top-progress ${busy ? 'on' : ''}`} role="progressbar" aria-hidden={!busy} aria-label="Loading"><span /></div>;
+  return <div className={`top-progress ${busy ? 'on' : ''}`} role="progressbar" aria-hidden={!busy} aria-label={tr('Loading')}><span /></div>;
 }
 
 /** Branded loader: logo inside a spinning gradient ring, with a message and bouncing dots. */

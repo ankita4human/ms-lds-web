@@ -157,6 +157,12 @@ public class DocPublisher(IConfiguration cfg, DocConverter conv, ILogger<DocPubl
             if (n == 0) throw new PublishException(409, "The document was changed by someone else. Please refresh the list.");
 
             res.Status = d.Status == 11 ? 11 : StPublished;
+            try
+            {   // catchwords: words repeated more than 3 times in the text become catchwords of the document (never fails the publish)
+                var nc = await AutoCatch.Apply(con, id, lang, source, log);
+                if (nc > 0) res.Warnings.Add($"{nc} catchword(s) were set from the document text.");
+            }
+            catch (Exception ex) { log.LogWarning(ex, "automatic catchwords failed for {Id}/{Lang}", id, lang); res.Warnings.Add("Automatic catchwords could not be saved: " + ex.Message); }
             res.Files = Directory.EnumerateFiles(target, "*", SearchOption.AllDirectories).Select(f => Path.GetRelativePath(target, f).Replace('\\', '/')).OrderBy(f => f).ToList();
             if (backup is not null) TryDelete(backup);
             if (otherRoot is not null)

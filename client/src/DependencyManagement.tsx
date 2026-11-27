@@ -11,6 +11,7 @@ import Toast, { type ToastMsg } from './components/Toast';
 import { StatusBadge } from './components/bits';
 import { FolderPicker } from './components/DocDialogs';
 import { IconDocs } from './components/Icons';
+import { tr } from './i18n';
 
 /** Options > Dependency (manual p. 83-85): documents that belong together. Changing one of them puts the others in Edit mode. */
 export default function DependencyManagement() {
@@ -34,11 +35,11 @@ export default function DependencyManagement() {
   async function run(fn: () => Promise<void>) { setBusy(true); try { await fn(); } catch (e) { setMsg({ ok: false, t: (e as Error).message }); } finally { setBusy(false); } }
   const add = () => run(async () => {
     const all = list.data?.items.map(d => d.name) ?? [];
-    let n = 'New dependency'; for (let i = 1; all.includes(n); i++) n = `New dependency (${i})`;
-    const r = await api.createDependency(lang, n); await refresh(); setSel(r.id); setRename(true); setMsg({ ok: true, t: 'Dependency added. Give it a name and add documents.' });
+    let n = tr('New dependency'); for (let i = 1; all.includes(n); i++) n = tr('New dependency ({0})', i);
+    const r = await api.createDependency(lang, n); await refresh(); setSel(r.id); setRename(true); setMsg({ ok: true, t: tr('Dependency added. Give it a name and add documents.') });
   });
-  const saveName = () => run(async () => { if (sel === null) return; await api.renameDependency(sel, name.trim()); await refresh(); setRename(false); setMsg({ ok: true, t: 'Saved.' }); });
-  const del = () => run(async () => { if (sel === null) return; await api.deleteDependency(sel); await refresh(); setSel(null); setAskDel(false); setMsg({ ok: true, t: 'Dependency deleted.' }); });
+  const saveName = () => run(async () => { if (sel === null) return; await api.renameDependency(sel, name.trim()); await refresh(); setRename(false); setMsg({ ok: true, t: tr('Saved.') }); });
+  const del = () => run(async () => { if (sel === null) return; await api.deleteDependency(sel); await refresh(); setSel(null); setAskDel(false); setMsg({ ok: true, t: tr('Dependency deleted.') }); });
   const removeDoc = (id: number) => run(async () => { if (sel === null) return; await api.removeDependencyDoc(sel, id); await refresh(); });
 
   const item = (d: DepItem) => (
@@ -47,47 +48,47 @@ export default function DependencyManagement() {
     </div>);
   return (
     <div className="um">
-      <PageHero icon={<IconDocs />} title="Dependency" sub="Documents that belong together: change one, the others go to Edit"
+      <PageHero icon={<IconDocs />} title={tr('Dependency')} sub={tr('Documents that belong together: change one, the others go to Edit')}
         chips={[{ n: list.data?.items.length ?? '–', label: 'dependencies' }, { n: list.data?.editChoice ? 'choose' : 'all', label: 'on edit' }]} />
       <div className="fm">
         <div className="card fm-list">
-          <div className="fm-list-head"><b>Dependencies ({lang})</b>
-            <span><button className="ico-btn add" title="Add dependency" aria-label="Add dependency" onClick={add} disabled={busy || !can}>＋</button>
-              <button className="ico-btn del" title="Delete dependency" aria-label="Delete dependency" onClick={() => setAskDel(true)} disabled={busy || !can || sel === null}>−</button></span></div>
-          {list.isLoading && <PageLoader compact label="Loading dependencies" />}
+          <div className="fm-list-head"><b>{tr('Dependencies (')}{lang})</b>
+            <span><button className="ico-btn add" title={tr('Add dependency')} aria-label={tr('Add dependency')} onClick={add} disabled={busy || !can}>＋</button>
+              <button className="ico-btn del" title={tr('Delete dependency')} aria-label={tr('Delete dependency')} onClick={() => setAskDel(true)} disabled={busy || !can || sel === null}>−</button></span></div>
+          {list.isLoading && <PageLoader compact label={tr('Loading dependencies')} />}
           {list.data?.items.map(item)}
-          {list.data?.items.length === 0 && <div className="mh" style={{ padding: 10 }}>No dependencies in this language.</div>}
+          {list.data?.items.length === 0 && <div className="mh" style={{ padding: 10 }}>{tr('No dependencies in this language.')}</div>}
         </div>
         <div className="card fm-edit">
-          {cur === undefined ? <div className="mh" style={{ padding: 20 }}>Select a dependency on the left or add a new one.{!can && ' You may view the dependencies but not change them (right "Management dependencies").'}</div> : (<>
-            <fieldset className="fm-box"><legend>Dependency</legend>
+          {cur === undefined ? <div className="mh" style={{ padding: 20 }}>{tr('Select a dependency on the left or add a new one.')}{!can && tr(' You may view the dependencies but not change them (right "Management dependencies").')}</div> : (<>
+            <fieldset className="fm-box"><legend>{tr('Dependency')}</legend>
               <div className="fm-top"><div className="fm-fields">
-                <label className="fm-row">Name<input value={name} maxLength={50} onChange={e => { setName(e.target.value); setRename(true); }} disabled={!can} /></label>
-                <small className="mh">Only documents in the original language ({lang}) can be added. When a dependent document is changed, the other documents of this dependency are put in Edit mode{list.data?.editChoice ? ' (you choose which ones)' : ''}.</small>
+                <label className="fm-row">{tr('Name')}<input value={name} maxLength={50} onChange={e => { setName(e.target.value); setRename(true); }} disabled={!can} /></label>
+                <small className="mh">{tr('Only documents in the original language (')}{lang}{tr(') can be added. When a dependent document is changed, the other documents of this dependency are put in Edit mode')}{list.data?.editChoice ? tr(' (you choose which ones)') : ''}.</small>
               </div>
                 <div className="fm-btns">
-                  <button className="btn-primary" onClick={saveName} disabled={busy || !can || !rename || !name.trim()}>{busy ? <Spinner /> : 'Save'}</button>
-                  <button className="btn-ghost" onClick={() => setPick(true)} disabled={busy || !can}>Add documents…</button>
-                  <button className="btn-ghost" onClick={() => nav('/documents')}>Close</button>
+                  <button className="btn-primary" onClick={saveName} disabled={busy || !can || !rename || !name.trim()}>{busy ? <Spinner /> : tr('Save')}</button>
+                  <button className="btn-ghost" onClick={() => setPick(true)} disabled={busy || !can}>{tr('Add documents…')}</button>
+                  <button className="btn-ghost" onClick={() => nav('/documents')}>{tr('Close')}</button>
                 </div></div>
             </fieldset>
             <div style={{ overflow: 'auto', maxHeight: 'calc(100vh - 380px)', border: '1px solid var(--line)', borderRadius: 12 }}>
               <table className="tbl" style={{ width: '100%' }}>
-                <thead><tr><th>ID</th><th>Document</th><th>Version</th><th>Status</th><th /></tr></thead>
+                <thead><tr><th>{tr('ID')}</th><th>{tr('Document')}</th><th>{tr('Version')}</th><th>{tr('Status')}</th><th /></tr></thead>
                 <tbody>
                   {docs.data?.items.map(d => (
                     <tr key={d.idDoc}><td>{d.idDoc}</td><td><b>{d.name}</b></td><td>{d.version}</td><td><StatusBadge id={d.status} name={d.statusName} /></td>
-                      <td style={{ textAlign: 'right' }}><button className="ico-btn del" title="Remove from dependency" aria-label="Remove from dependency" onClick={() => removeDoc(d.idDoc)} disabled={busy || !can}>−</button></td></tr>))}
-                  {docs.isLoading && <tr><td colSpan={5}><Spinner /> Loading…</td></tr>}
-                  {docs.data && docs.data.items.length === 0 && <tr><td colSpan={5} className="mh" style={{ padding: 14 }}>No documents in this dependency yet.</td></tr>}
+                      <td style={{ textAlign: 'right' }}><button className="ico-btn del" title={tr('Remove from dependency')} aria-label={tr('Remove from dependency')} onClick={() => removeDoc(d.idDoc)} disabled={busy || !can}>−</button></td></tr>))}
+                  {docs.isLoading && <tr><td colSpan={5}><Spinner /> {tr('Loading…')}</td></tr>}
+                  {docs.data && docs.data.items.length === 0 && <tr><td colSpan={5} className="mh" style={{ padding: 14 }}>{tr('No documents in this dependency yet.')}</td></tr>}
                 </tbody>
               </table>
             </div>
           </>)}
         </div>
       </div>
-      {askDel && cur && <ConfirmDialog danger title="Delete dependency?" confirmLabel="Delete" busy={busy}
-        message={<>The dependency <b>{cur.name}</b> is deleted. The documents themselves stay as they are.</>} onConfirm={del} onCancel={() => setAskDel(false)} />}
+      {askDel && cur && <ConfirmDialog danger title={tr('Delete dependency?')} confirmLabel={tr('Delete')} busy={busy}
+        message={<>{tr('The dependency')}{' '}<b>{cur.name}</b> {tr('is deleted. The documents themselves stay as they are.')}</>} onConfirm={del} onCancel={() => setAskDel(false)} />}
       {pick && sel !== null && <PickDocs depId={sel} lang={lang} have={new Set(docs.data?.items.map(d => d.idDoc))} onClose={() => setPick(false)}
         onDone={async m => { setPick(false); await refresh(); setMsg({ ok: true, t: m }); }} />}
       <Toast msg={msg} onClose={() => setMsg(null)} />
@@ -113,30 +114,30 @@ function PickDocs({ depId, lang, have, onClose, onDone }: { depId: number; lang:
   }
   return (
     <div className="modal-back" onMouseDown={() => !busy && onClose()}>
-      <div className="modal grp-dlg" style={{ width: 760 }} role="dialog" aria-modal="true" aria-label="Choose documents" onMouseDown={e => e.stopPropagation()}>
-        <div className="modal-head"><div><h3 style={{ margin: 0 }}>Choose Group</h3><div className="mh">Documents of language {lang}</div></div><button className="x" onClick={onClose} disabled={busy} aria-label="Close">✕</button></div>
+      <div className="modal grp-dlg" style={{ width: 760 }} role="dialog" aria-modal="true" aria-label={tr('Choose documents')} onMouseDown={e => e.stopPropagation()}>
+        <div className="modal-head"><div><h3 style={{ margin: 0 }}>{tr('Choose Group')}</h3><div className="mh">{tr('Documents of language')}{' '}{lang}</div></div><button className="x" onClick={onClose} disabled={busy} aria-label={tr('Close')}>✕</button></div>
         <div style={{ display: 'grid', gridTemplateColumns: '280px 1fr', gap: 12, minHeight: 320 }}>
-          <div style={{ maxHeight: 360, overflow: 'auto' }}>{tree.data ? <FolderPicker groups={tree.data.groups} value={group} onChange={setGroup} /> : <PageLoader compact label="Loading groups" />}</div>
+          <div style={{ maxHeight: 360, overflow: 'auto' }}>{tree.data ? <FolderPicker groups={tree.data.groups} value={group} onChange={setGroup} /> : <PageLoader compact label={tr('Loading groups')} />}</div>
           <div style={{ display: 'grid', gap: 8, alignContent: 'start' }}>
-            <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search by name or ID…" aria-label="Search documents" style={{ padding: '8px 10px', border: '1px solid #d0d5dd', borderRadius: 10, font: 'inherit' }} />
+            <input value={q} onChange={e => setQ(e.target.value)} placeholder={tr('Search by name or ID…')} aria-label={tr('Search documents')} style={{ padding: '8px 10px', border: '1px solid #d0d5dd', borderRadius: 10, font: 'inherit' }} />
             <div style={{ maxHeight: 300, overflow: 'auto', border: '1px solid var(--line)', borderRadius: 10 }}>
               <table className="tbl" style={{ width: '100%', fontSize: 13 }}><tbody>
                 {res.data?.map(d => { const inDep = have.has(d.idDoc); return (
                   <tr key={d.idDoc} style={inDep ? { opacity: .5 } : undefined}>
-                    <td><input type="checkbox" disabled={inDep} checked={inDep || chosen.has(d.idDoc)} onChange={() => toggle(d.idDoc)} aria-label={`Select ${d.name}`} /></td>
+                    <td><input type="checkbox" disabled={inDep} checked={inDep || chosen.has(d.idDoc)} onChange={() => toggle(d.idDoc)} aria-label={tr('Select {0}', d.name)} /></td>
                     <td>{d.idDoc}</td><td><b>{d.name}</b></td><td>{d.version}</td><td><StatusBadge id={d.status} name={d.statusName} /></td></tr>); })}
-                {res.isFetching && <tr><td colSpan={5}><Spinner /> Searching…</td></tr>}
-                {res.data?.length === 0 && <tr><td colSpan={5} className="mh" style={{ padding: 12 }}>No documents found.</td></tr>}
-                {!res.data && !res.isFetching && <tr><td colSpan={5} className="mh" style={{ padding: 12 }}>Choose a group or type a name.</td></tr>}
+                {res.isFetching && <tr><td colSpan={5}><Spinner /> {tr('Searching…')}</td></tr>}
+                {res.data?.length === 0 && <tr><td colSpan={5} className="mh" style={{ padding: 12 }}>{tr('No documents found.')}</td></tr>}
+                {!res.data && !res.isFetching && <tr><td colSpan={5} className="mh" style={{ padding: 12 }}>{tr('Choose a group or type a name.')}</td></tr>}
               </tbody></table>
             </div>
             {err && <div className="alert" role="alert">{err}</div>}
           </div>
         </div>
         <div className="modal-foot">
-          <small className="mh" style={{ marginRight: 'auto' }}>{chosen.size} selected</small>
-          <button className="btn-ghost" onClick={onClose} disabled={busy}>Close</button>
-          <button className="btn-primary" style={{ width: 'auto' }} onClick={go} disabled={busy || chosen.size === 0}>{busy ? <Spinner /> : 'Add'}</button>
+          <small className="mh" style={{ marginRight: 'auto' }}>{chosen.size} {tr('selected')}</small>
+          <button className="btn-ghost" onClick={onClose} disabled={busy}>{tr('Close')}</button>
+          <button className="btn-primary" style={{ width: 'auto' }} onClick={go} disabled={busy || chosen.size === 0}>{busy ? <Spinner /> : tr('Add')}</button>
         </div>
       </div>
     </div>

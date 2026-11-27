@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api, type DocRow } from '../api';
 import { Spinner } from './Loader';
+import { track } from '../activity';
+import { tr } from '../i18n';
 
 /** Verify / Release / Publish for many documents at once. Every document goes through the same server calls as the single
  *  actions (so all legacy rules and rights are checked per document); a document that cannot take the step is skipped with the reason. */
@@ -17,11 +19,11 @@ export function planFor(kind: BulkKind, d: DocRow, can: (right: number) => boole
   else if (kind === 'publish') steps = s === 8 || s === 3 ? ['publish'] : null;
   else steps = s === 1 || s === 2 ? ['verify', 'release', 'publish'] : s === 7 ? ['release', 'publish'] : s === 8 ? ['publish'] : null;
   if (!steps) {
-    return kind === 'verify' ? 'Not in Draft or Edit status' : kind === 'release' ? 'Not verified' : kind === 'publish' ? 'Not released'
-      : s === 3 ? 'Already published' : 'Status does not allow it';
+    return kind === 'verify' ? tr('Not in Draft or Edit status') : kind === 'release' ? tr('Not verified') : kind === 'publish' ? tr('Not released')
+      : s === 3 ? tr('Already published') : tr('Status does not allow it');
   }
   const miss = steps.find(x => !can(RIGHT[x]));
-  return miss ? `No right to ${miss}` : steps;
+  return miss ? tr('No right to {0}', miss) : steps;
 }
 
 const TITLE: Record<BulkKind, { t: string; ic: string; go: string; text: string }> = {
@@ -62,7 +64,7 @@ export default function BulkFlowDialog({ kind, docs, lang, can, onClose, onFinis
     let skipN = rows.filter(r => !r.steps).length;
     for (let i = 0; i < rows.length; i++) {
       const r = rows[i]!; if (!r.steps) continue;
-      if (stop.current || abort) { patch(i, { state: 'skip', msg: abort ? 'Not run: password was not accepted' : 'Stopped' }); skipN++; continue; }
+      if (stop.current || abort) { patch(i, { state: 'skip', msg: abort ? tr('Not run: password was not accepted') : tr('Stopped') }); skipN++; continue; }
       patch(i, { state: 'run', msg: undefined });
       const d = r.doc; const pw = needPwd ? pwd : undefined;
       try {
@@ -70,7 +72,8 @@ export default function BulkFlowDialog({ kind, docs, lang, can, onClose, onFinis
         if (st.includes('verify')) { await api.verifyDoc(d.idDoc, lang); out = 'Verified'; }
         if (st.includes('release') && st.includes('publish')) { const x = await api.releasePublishDoc(d.idDoc, lang, pw, undefined, undefined, true); out = `${out ? out + ', ' : ''}released v${x.version}${x.mailSent ? ' (mail sent)' : ''}, queued for publishing`; queued++; }
         else if (st.includes('release')) { const x = await api.releaseDoc(d.idDoc, lang, pw, undefined, true); out = `${out ? out + ', ' : ''}released v${x.version}${x.mailSent ? ' (mail sent)' : x.mailError ? ' (mail failed)' : ''}`; }
-        else if (st.includes('publish')) { await api.publishDoc(d.idDoc, lang, undefined, true); out = 'Queued for publishing'; queued++; }
+        else if (st.includes('publish')) { await api.publishDoc(d.idDoc, lang, undefined, true); out = tr('Queued for publishing'); queued++; }
+        st.forEach(x => track(x, d, lang));   // shows up in the "My activity" tray
         patch(i, { state: 'ok', msg: out }); okN++;
       } catch (e) {
         const m = (e as Error).message;
@@ -88,10 +91,10 @@ export default function BulkFlowDialog({ kind, docs, lang, can, onClose, onFinis
   return (
     <div className="modal-back" style={{ zIndex: 90 }} onMouseDown={() => phase !== 'run' && onClose()}>
       <div className="modal bk" role="dialog" aria-modal="true" aria-label={T.t} onMouseDown={e => e.stopPropagation()}>
-        <div className="modal-head"><h3><span aria-hidden="true">{T.ic}</span> {T.t}</h3><button className="x" onClick={onClose} disabled={phase === 'run'} aria-label="Close">✕</button></div>
-        <p className="bk-lead">{phase === 'review' ? <><b>{todo.length}</b> of {rows.length} selected document{rows.length === 1 ? '' : 's'} can take this step. {T.text}</> : phase === 'run' ? 'Working through the documents - please keep this window open.' : 'Finished.'}</p>
+        <div className="modal-head"><h3><span aria-hidden="true">{T.ic}</span> {T.t}</h3><button className="x" onClick={onClose} disabled={phase === 'run'} aria-label={tr('Close')}>✕</button></div>
+        <p className="bk-lead">{phase === 'review' ? <><b>{todo.length}</b> {tr('of')}{' '}{rows.length} {tr('selected document')}{rows.length === 1 ? '' : 's'} {tr('can take this step.')}{' '}{T.text}</> : phase === 'run' ? tr('Working through the documents - please keep this window open.') : tr('Finished.')}</p>
 
-        {phase !== 'review' && <div className="up-progress"><span style={{ width: `${pct}%` }} /><em>{finished} of {rows.length}</em></div>}
+        {phase !== 'review' && <div className="up-progress"><span style={{ width: `${pct}%` }} /><em>{finished} {tr('of')}{' '}{rows.length}</em></div>}
 
         <div className="bk-list">
           {rows.map((r, i) => (
@@ -99,33 +102,32 @@ export default function BulkFlowDialog({ kind, docs, lang, can, onClose, onFinis
               <span className="bk-ic" aria-hidden="true">{icon(r.state)}</span>
               <div className="bk-tx">
                 <b title={r.doc.docName}>{r.doc.docName}</b>
-                <small>#{r.doc.idDoc} · {r.doc.statusName} · v{r.doc.v1}.{r.doc.v2}.{r.doc.v3}</small>
+                <small>#{r.doc.idDoc} · {r.doc.statusName} {tr('· v')}{r.doc.v1}.{r.doc.v2}.{r.doc.v3}</small>
               </div>
               <span className="bk-res">
                 {r.state === 'wait' && r.steps ? r.steps.map(s => s[0]!.toUpperCase() + s.slice(1)).join(' → ') : r.msg}
               </span>
-              {phase === 'review' && !r.steps && <span className="bk-skip">skipped</span>}
-              {phase === 'review' && r.steps && <button className="nb-x" aria-label="Leave out" title="Leave out" onClick={() => patch(i, { steps: null, state: 'skip', skip: 'Left out', msg: 'Left out' })}>×</button>}
+              {phase === 'review' && !r.steps && <span className="bk-skip">{tr('skipped')}</span>}
+              {phase === 'review' && r.steps && <button className="nb-x" aria-label={tr('Leave out')} title={tr('Leave out')} onClick={() => patch(i, { steps: null, state: 'skip', skip: tr('Left out'), msg: tr('Left out') })}>×</button>}
             </div>
           ))}
         </div>
 
         {phase === 'review' && needPwd && (
-          <label className="wf-pwd">Confirm the release with your password
-            <input type="password" value={pwd} autoComplete="current-password" onChange={e => setPwd(e.target.value)} /></label>
+          <label className="wf-pwd">{tr('Confirm the release with your password')}<input type="password" value={pwd} autoComplete="current-password" onChange={e => setPwd(e.target.value)} /></label>
         )}
         {phase === 'done' && (
           <div className={`bk-sum ${counts.failed ? 'bad' : 'ok'}`} role="status">
-            <b>{counts.ok}</b> done{counts.failed > 0 && <> · <b>{counts.failed}</b> failed</>}{counts.skipped > 0 && <> · <b>{counts.skipped}</b> skipped</>}
-            {kind !== 'verify' && kind !== 'release' && counts.ok > 0 && <small> Publishing continues in the background - watch the bell.</small>}
+            <b>{counts.ok}</b> {tr('done')}{counts.failed > 0 && <> · <b>{counts.failed}</b> {tr('failed')}</>}{counts.skipped > 0 && <> · <b>{counts.skipped}</b> {tr('skipped')}</>}
+            {kind !== 'verify' && kind !== 'release' && counts.ok > 0 && <small> {tr('Publishing continues in the background - watch the bell.')}</small>}
           </div>
         )}
 
         <div className="modal-foot">
-          {phase === 'review' && <><button className="btn-ghost" onClick={onClose}>Cancel</button>
+          {phase === 'review' && <><button className="btn-ghost" onClick={onClose}>{tr('Cancel')}</button>
             <button className="btn-primary" style={{ width: 'auto' }} disabled={!todo.length || (needPwd && !pwd) || (needRelease && opts.isLoading)} onClick={run}>{T.go} ({todo.length})</button></>}
-          {phase === 'run' && <button className="btn-ghost" onClick={() => { stop.current = true; }}><Spinner /> Stop after this document</button>}
-          {phase === 'done' && <button className="btn-primary" style={{ width: 'auto' }} onClick={onClose}>Close</button>}
+          {phase === 'run' && <button className="btn-ghost" onClick={() => { stop.current = true; }}><Spinner /> {tr('Stop after this document')}</button>}
+          {phase === 'done' && <button className="btn-primary" style={{ width: 'auto' }} onClick={onClose}>{tr('Close')}</button>}
         </div>
       </div>
     </div>

@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { api, type DocRow, type FlowResult } from '../api';
 import { Spinner } from './Loader';
 import MailFlowDialog from './MailFlowDialog';
+import { tr } from '../i18n';
 
 const TEXT: Record<FlowKind, { title: string; icon: string; button: string; text: string }> = {
   verify: { title: 'Verify document', icon: '✅', button: 'Verify', text: 'The document is approved as finished. Only verified documents can be released and then published.' },
@@ -41,7 +42,7 @@ export default function WorkflowDialog({ kind, doc, lang, onClose, onDone, onRef
   const T = TEXT[kind];
   // Config SendDefaultMail = 1: release / publish open the e-mail window (manual p. 108-109 "Add Email Address"), otherwise the plain confirmation below
   if (kind !== 'verify' && mailOpt.isLoading) return (
-    <div className="modal-back" style={{ zIndex: 90 }}><div className="modal confirm wf" role="status"><div className="confirm-msg"><Spinner /> Please wait…</div></div></div>);
+    <div className="modal-back" style={{ zIndex: 90 }}><div className="modal confirm wf" role="status"><div className="confirm-msg"><Spinner /> {tr('Please wait…')}</div></div></div>);
   if (kind !== 'verify' && mailOpt.data?.enabled) return <MailFlowDialog kind={kind} doc={doc} lang={lang} onClose={onClose} onDone={onDone} />;
   return (
     <div className="modal-back" style={{ zIndex: 90 }} onMouseDown={() => !busy && onClose()}>
@@ -49,16 +50,15 @@ export default function WorkflowDialog({ kind, doc, lang, onClose, onDone, onRef
         <div className={`confirm-ico wf-ico ${verify ? 'v' : 'r'}`} aria-hidden="true">{T.icon}</div>
         <h3>{T.title}?</h3>
         <div className="confirm-msg">
-          <b>{doc.docName}</b> <small>#{doc.idDoc} · version {doc.v1}.{doc.v2}.{doc.v3} · {lang}</small>
+          <b>{doc.docName}</b> <small>#{doc.idDoc} {tr('· version')}{' '}{doc.v1}.{doc.v2}.{doc.v3} · {lang}</small>
           <p>{T.text}</p>
-          {needPwd && <label className="wf-pwd">Confirm with your password
-            <input ref={pwdRef} type="password" value={pwd} autoComplete="current-password" onChange={e => setPwd(e.target.value)} onKeyDown={e => e.key === 'Enter' && pwd && go()} /></label>}
+          {needPwd && <label className="wf-pwd">{tr('Confirm with your password')}<input ref={pwdRef} type="password" value={pwd} autoComplete="current-password" onChange={e => setPwd(e.target.value)} onKeyDown={e => e.key === 'Enter' && pwd && go()} /></label>}
           {err && <div className="alert" role="alert">{err}</div>}
         </div>
         <div className="modal-foot" style={{ justifyContent: 'center' }}>
-          <button className="btn-ghost" onClick={onClose} disabled={busy}>Cancel</button>
+          <button className="btn-ghost" onClick={onClose} disabled={busy}>{tr('Cancel')}</button>
           <button className="btn-primary" style={{ width: 'auto' }} onClick={go} disabled={busy || loading || (needPwd && !pwd)}>
-            {busy ? <><Spinner />{kind === 'verify' || kind === 'release' ? 'Please wait' : 'Please wait'}</> : T.button}</button>
+            {busy ? <><Spinner />{kind === 'verify' || kind === 'release' ? tr('Please wait') : tr('Please wait')}</> : T.button}</button>
         </div>
       </div>
     </div>

@@ -4,13 +4,16 @@ import { api, auth } from './api';
 import { PageLoader, Spinner } from './components/Loader';
 import { IconEye, IconLock, IconUser } from './components/Icons';
 import LoginMonkey from './components/LoginMonkey';
+import UiLangSwitch from './components/UiLangSwitch';
+import { t, useI18n, tr, UI_LANGS } from './i18n';
 
 const REMEMBER = 'pl_login';
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
-function greeting() { const h = new Date().getHours(); return h < 5 ? 'Good night' : h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening'; }
+function greeting() { const h = new Date().getHours(); return h < 5 ? t('login.night') : h < 12 ? t('login.morning') : h < 18 ? t('login.afternoon') : t('login.evening'); }
 
 export default function Login() {
   const nav = useNavigate();
+  const { ui, setUi } = useI18n();   // re-render when the interface language is changed
   const saved = (() => { try { return localStorage.getItem(REMEMBER) ?? ''; } catch { return ''; } })();
   const [login, setLogin] = useState(saved); const [pw, setPw] = useState('');
   const [remember, setRemember] = useState(!!saved);
@@ -47,44 +50,49 @@ export default function Login() {
 
   return (
     <div className="login" onMouseMove={onMove}>
-      {busy && <div className="login-overlay"><PageLoader compact label="Signing you in" /></div>}
+      <UiLangSwitch variant="login" />
+      {busy && <div className="login-overlay"><PageLoader compact label={t('login.signingInLabel')} /></div>}
       <section className="login-hero">
         <div>
-          <div className="brand-row"><img src="/logo-lds.png" alt="MS LDS" /><b>MS LDS<sup>®</sup> Web</b></div>
-          <h1>Your management system documents, always in reach.</h1>
-          <p>Browse the document structure, follow every version and release, and keep an overview of status and expiry dates, from any browser.</p>
-          <img className="mock" src="/hero.png" alt="MS LDS on laptop and phone" />
+          <div className="brand-row"><img src="/logo-lds.png" alt={tr('MS LDS')} /><b>{tr('MS LDS')}<sup>®</sup> {tr('Web')}</b></div>
+          <h1>{t('login.heroTitle')}</h1>
+          <p>{t('login.heroText')}</p>
+          <img className="mock" src="/hero.png" alt={tr('MS LDS on laptop and phone')} />
         </div>
-        <div className="hero-foot"><img src="/logo-qf.png" alt="MS QF" /> MS QF GmbH · Integrated management systems</div>
+        <div className="hero-foot"><img src="/logo-qf.png" alt={tr('MS QF')} /> {t('login.heroFoot')}</div>
       </section>
       <section className="login-panel wl-panel">
         <i className="wl-bloom b1" /><i className="wl-bloom b2" /><i className="wl-bloom b3" />
         <form className={`login-card wl-card ${shake ? 'shake' : ''}`} onSubmit={submit} ref={box}>
           <LoginMonkey cover={cover} peek={peek} mood={mood} look={look} />
+          <div className="wl-langs" role="group" aria-label={t('head.uiLang')}>
+            <span aria-hidden>🌐</span>
+            {UI_LANGS.map(l => <button type="button" key={l.code} className={l.code === ui ? 'on' : ''} onClick={() => setUi(l.code)} title={l.name} aria-pressed={l.code === ui}>{l.code}</button>)}
+          </div>
           <div className="wl-hello">{greeting()}</div>
-          <h2>Welcome back</h2>
-          <div className="sub">Sign in to continue to MS LDS.</div>
+          <h2>{t('login.welcome')}</h2>
+          <div className="sub">{t('login.sub')}</div>
           {err && <div className="alert wl-alert" role="alert">{err}</div>}
           <div className="wl-field">
-            <label htmlFor="u">Login</label>
+            <label htmlFor="u">{t('login.login')}</label>
             <div className="wl-input"><IconUser />
               <input id="u" value={login} onChange={e => setLogin(e.target.value)} onFocus={() => setFocus('user')} onBlur={() => setFocus('none')}
-                autoFocus={!saved} autoComplete="username" spellCheck={false} placeholder="Your login name" /></div>
+                autoFocus={!saved} autoComplete="username" spellCheck={false} placeholder={t('login.loginPh')} /></div>
           </div>
           <div className="wl-field" onFocus={() => setFocus('pw')} onBlur={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setFocus('none'); }}>
-            <label htmlFor="p">Password</label>
+            <label htmlFor="p">{t('login.password')}</label>
             <div className="wl-input"><IconLock />
               <input id="p" ref={pwRef} type={show ? 'text' : 'password'} value={pw} onChange={e => setPw(e.target.value)} onKeyDown={caps2} onKeyUp={caps2}
-                autoComplete="current-password" placeholder="Your password" />
-              <button type="button" className="eye" onClick={() => setShow(!show)} aria-label={show ? 'Hide password' : 'Show password'} title={show ? 'Hide password' : 'Show password (the monkey will peek!)'}><IconEye off={show} /></button>
+                autoComplete="current-password" placeholder={t('login.passwordPh')} />
+              <button type="button" className="eye" onClick={() => setShow(!show)} aria-label={show ? t('login.hide') : t('login.show')} title={show ? t('login.hide') : t('login.show')}><IconEye off={show} /></button>
             </div>
-            {caps && focus === 'pw' && <div className="wl-caps" role="status">⇪ Caps Lock is on</div>}
+            {caps && focus === 'pw' && <div className="wl-caps" role="status">⇪ {t('login.caps')}</div>}
           </div>
           <div className="wl-row">
-            <label className="wl-check"><input type="checkbox" checked={remember} onChange={e => setRemember(e.target.checked)} /><span /> Remember my login name</label>
+            <label className="wl-check"><input type="checkbox" checked={remember} onChange={e => setRemember(e.target.checked)} /><span /> {t('login.remember')}</label>
           </div>
-          <button className="wl-go" disabled={busy || !login || !pw}>{busy ? <><Spinner />Signing in</> : <>Sign in <span aria-hidden>→</span></>}</button>
-          <div className="login-foot">© MS QF GmbH</div>
+          <button className="wl-go" disabled={busy || !login || !pw}>{busy ? <><Spinner />{t('login.signingIn')}</> : <>{t('login.signIn')} <span aria-hidden>→</span></>}</button>
+          <div className="login-foot">{tr('© MS QF GmbH')}</div>
         </form>
       </section>
     </div>

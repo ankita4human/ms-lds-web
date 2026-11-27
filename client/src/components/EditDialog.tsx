@@ -7,6 +7,7 @@ import ConfirmDialog from './ConfirmDialog';
 import { ExtBadge } from './bits';
 import './editdlg.css';
 import VersionPicker, { isHigher, verText, type Ver } from './VersionPicker';
+import { tr } from '../i18n';
 
 const VERSIONED = [3, 6, 8, 9]; // Published, Expired, Released, Blocked: a new file needs a higher version (manual: version window)
 
@@ -37,9 +38,9 @@ export default function EditDialog({ doc, lang, onClose, onDone }: {
   const checkOut = () => run(async () => { await api.checkOut(doc.idDoc, lang); setState('mine'); await downloadDocFile(doc.idDoc, lang, `${doc.docName}${doc.extension ? (doc.extension.startsWith('.') ? doc.extension : '.' + doc.extension) : ''}`); track('edit', doc, lang); track('download', doc, lang); });
   const unlock = () => run(async () => { await api.unlock(doc.idDoc); setAskCancel(false); setState('free'); setFile(null); });
   const checkIn = () => run(async () => {
-    if (!file) throw new Error('Please choose the edited file.');
-    if (!draft && !comment.trim()) throw new Error('Please enter a modification comment.');
-    if (versioned && !isHigher(ver, current)) throw new Error(`Choose a version higher than ${verText(current)}.`);
+    if (!file) throw new Error(tr('Please choose the edited file.'));
+    if (!draft && !comment.trim()) throw new Error(tr('Please enter a modification comment.'));
+    if (versioned && !isHigher(ver, current)) throw new Error(tr('Choose a version higher than {0}.', verText(current)));
     const f = new FormData();
     f.append('file', file); f.append('lang', lang); f.append('comment', comment.trim());
     if (versioned) { f.append('v1', String(ver.v1)); f.append('v2', String(ver.v2)); f.append('v3', String(ver.v3)); }
@@ -54,35 +55,35 @@ export default function EditDialog({ doc, lang, onClose, onDone }: {
   const drop = (f?: File | null) => { if (f) setFile(f); };
   return (
     <div className="modal-back" onMouseDown={() => !busy && onClose()}>
-      <div className="modal ed-dlg" role="dialog" aria-label="Edit document" onMouseDown={e => e.stopPropagation()}>
+      <div className="modal ed-dlg" role="dialog" aria-label={tr('Edit document')} onMouseDown={e => e.stopPropagation()}>
         <div className="ed-top">
-          <div><h3>Edit document</h3><small>Check out, edit locally, check in</small></div>
-          <button className="x" onClick={onClose} disabled={busy} aria-label="Close">✕</button>
+          <div><h3>{tr('Edit document')}</h3><small>{tr('Check out, edit locally, check in')}</small></div>
+          <button className="x" onClick={onClose} disabled={busy} aria-label={tr('Close')}>✕</button>
         </div>
-        <ol className="ed-steps" aria-label="Progress">
-          <li className={step > 1 ? 'done' : 'on'}><i>{step > 1 ? '✓' : '1'}</i><span>Check out</span></li>
+        <ol className="ed-steps" aria-label={tr('Progress')}>
+          <li className={step > 1 ? 'done' : 'on'}><i>{step > 1 ? '✓' : '1'}</i><span>{tr('Check out')}</span></li>
           <li className="ed-bar" aria-hidden />
-          <li className={step === 2 ? 'on' : ''}><i>2</i><span>Check in</span></li>
+          <li className={step === 2 ? 'on' : ''}><i>2</i><span>{tr('Check in')}</span></li>
         </ol>
         <div className="ed-doc">
           <ExtBadge ext={doc.extension} compact />
           <div className="ed-doc-t"><b title={doc.docName}>#{doc.idDoc} {doc.docName}</b>
-            <small><span className="ed-pill">v{verText(current)}</span><span className="ed-pill">{lang}</span>{ext && <span className="ed-pill">{ext}</span>}</small></div>
-          {state === 'mine' && <span className="ed-lock" title="You have this document checked out">🔒 Checked out by you</span>}
+            <small><span className="ed-pill">{tr('v')}{verText(current)}</span><span className="ed-pill">{lang}</span>{ext && <span className="ed-pill">{ext}</span>}</small></div>
+          {state === 'mine' && <span className="ed-lock" title={tr('You have this document checked out')}>{tr('🔒 Checked out by you')}</span>}
         </div>
-        {state === 'loading' && <div className="mh"><Spinner /> Checking the lock…</div>}
-        {state === 'other' && <div className="alert" role="alert">This document is checked out by another user.</div>}
+        {state === 'loading' && <div className="mh"><Spinner /> {tr('Checking the lock…')}</div>}
+        {state === 'other' && <div className="alert" role="alert">{tr('This document is checked out by another user.')}</div>}
         {state === 'free' && (
           <div className="ed-card">
             <div className="ed-card-ico" aria-hidden>⬇️</div>
-            <div><b>Step 1 – check out</b>
-              <p className="mh">The document is locked for all languages and the file is downloaded so you can edit it.</p></div>
-            <button className="ed-go" onClick={checkOut} disabled={busy}>{busy ? <><Spinner />Checking out</> : 'Check out & download'}</button>
+            <div><b>{tr('Step 1 – check out')}</b>
+              <p className="mh">{tr('The document is locked for all languages and the file is downloaded so you can edit it.')}</p></div>
+            <button className="ed-go" onClick={checkOut} disabled={busy}>{busy ? <><Spinner />{tr('Checking out')}</> : tr('Check out & download')}</button>
           </div>
         )}
         {state === 'mine' && (<>
           <div className="ed-sec">
-            <div className="ed-lab">Edited file</div>
+            <div className="ed-lab">{tr('Edited file')}</div>
             <input ref={input} type="file" hidden accept={ext || undefined} onChange={e => drop(e.target.files?.[0])} />
             <div className={`ed-drop${drag ? ' over' : ''}${file ? ' has' : ''}`} role="button" tabIndex={0}
               onClick={() => input.current?.click()} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); input.current?.click(); } }}
@@ -90,37 +91,37 @@ export default function EditDialog({ doc, lang, onClose, onDone }: {
               onDrop={e => { e.preventDefault(); setDrag(false); drop(e.dataTransfer.files?.[0]); }}>
               {file ? (<>
                 <ExtBadge ext={file.name.split('.').pop()} compact />
-                <div className="ed-file"><b title={file.name}>{file.name}</b><small>{kb.toLocaleString()} KB · click to choose another</small></div>
+                <div className="ed-file"><b title={file.name}>{file.name}</b><small>{kb.toLocaleString()} {tr('KB · click to choose another')}</small></div>
                 <span className="ed-ok" aria-hidden>✓</span>
               </>) : (<>
                 <div className="ed-cloud" aria-hidden>☁️</div>
-                <div><b>Drop the edited {ext || 'file'} here</b><small>or click to browse</small></div>
+                <div><b>{tr('Drop the edited')}{' '}{ext || 'file'} {tr('here')}</b><small>{tr('or click to browse')}</small></div>
               </>)}
             </div>
           </div>
           <label className="ed-sec" htmlFor="ed-comment">
-            <div className="ed-lab">Modification comment{draft ? ' (optional)' : ''}<em>{comment.length} / 900</em></div>
-            <textarea id="ed-comment" rows={2} value={comment} maxLength={900} onChange={e => setComment(e.target.value)} placeholder="What was changed?" />
+            <div className="ed-lab">{tr('Modification comment')}{draft ? ' (optional)' : ''}<em>{comment.length} / 900</em></div>
+            <textarea id="ed-comment" rows={2} value={comment} maxLength={900} onChange={e => setComment(e.target.value)} placeholder={tr('What was changed?')} />
           </label>
           {versioned && (
             <div className="ed-sec">
-              <div className="ed-lab">New version<em className="ed-arrow"><span>{verText(current)}</span> → <b>{verText(ver)}</b></em></div>
+              <div className="ed-lab">{tr('New version')}<em className="ed-arrow"><span>{verText(current)}</span> → <b>{verText(ver)}</b></em></div>
               <VersionPicker value={ver} onChange={setVer} current={current} />
-              <small className="mh">📚 The previous version is kept in the archive. A middle or major change also moves the other languages.</small>
+              <small className="mh">{tr('📚 The previous version is kept in the archive. A middle or major change also moves the other languages.')}</small>
             </div>
           )}
-          {!versioned && !draft && <small className="mh">The document goes to status “Edit”.</small>}
+          {!versioned && !draft && <small className="mh">{tr('The document goes to status “Edit”.')}</small>}
         </>)}
         {err && <div className="alert" role="alert">{err}</div>}
         <div className="modal-foot">
-          {state === 'mine' && <button className="btn-ghost ed-danger" onClick={() => setAskCancel(true)} disabled={busy}>Cancel check-out</button>}
+          {state === 'mine' && <button className="btn-ghost ed-danger" onClick={() => setAskCancel(true)} disabled={busy}>{tr('Cancel check-out')}</button>}
           <span style={{ flex: 1 }} />
-          <button className="btn-ghost" onClick={onClose} disabled={busy}>Close</button>
-          {state === 'mine' && <button className="ed-go" onClick={checkIn} disabled={busy || !file}>{busy ? <><Spinner />Checking in</> : '✔ Check in'}</button>}
+          <button className="btn-ghost" onClick={onClose} disabled={busy}>{tr('Close')}</button>
+          {state === 'mine' && <button className="ed-go" onClick={checkIn} disabled={busy || !file}>{busy ? <><Spinner />{tr('Checking in')}</> : tr('✔ Check in')}</button>}
         </div>
       </div>
-      {askCancel && <ConfirmDialog title="Cancel check-out?" confirmLabel="Cancel check-out" busy={busy}
-        message="The document is unlocked and your edited file is not uploaded." onConfirm={async () => { await unlock(); setAskCancel(false); }} onCancel={() => setAskCancel(false)} />}
+      {askCancel && <ConfirmDialog title={tr('Cancel check-out?')} confirmLabel={tr('Cancel check-out')} busy={busy}
+        message={tr('The document is unlocked and your edited file is not uploaded.')} onConfirm={async () => { await unlock(); setAskCancel(false); }} onCancel={() => setAskCancel(false)} />}
     </div>
   );
 }

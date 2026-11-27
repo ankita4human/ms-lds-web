@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { applyTheme, getTheme, type ThemeMode } from '../theme';
+import { tr } from '../i18n';
 
 const ICON: Record<ThemeMode, JSX.Element> = {
   normal: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="9" /><path d="M12 3v18" /><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor" stroke="none" /></svg>,
@@ -15,7 +16,7 @@ export default function ThemeSwitch() {
   const [mode, setMode] = useState<ThemeMode>(getTheme());
   const pick = (m: ThemeMode) => { applyTheme(m); setMode(m); };
   return (
-    <div className="theme-sw" role="radiogroup" aria-label="Theme">
+    <div className="theme-sw" role="radiogroup" aria-label={tr('Theme')}>
       {(['normal', 'light', 'dark', 'night', 'navy'] as ThemeMode[]).map(m => (
         <button key={m} role="radio" aria-checked={mode === m} className={mode === m ? 'on' : ''} title={LABEL[m]} aria-label={LABEL[m]} onClick={() => pick(m)}>{ICON[m]}</button>
       ))}

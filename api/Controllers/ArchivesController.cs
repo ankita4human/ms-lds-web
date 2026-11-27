@@ -76,16 +76,17 @@ public class ArchivesController(IConfiguration cfg, DocConverter conv, DocPublis
         if (!visible) return NotFound(new { error = "Document not found." });
         var rows = (await con.QueryAsync<ArchiveItem>(@"
             SELECT a.V1, a.V2, a.V3, a.DocName, ISNULL(a.[Status], 0) AS [Status],
-                   ISNULL(s.StatusDesc, CASE a.[Status] WHEN 11 THEN 'Frozen' ELSE CONCAT('Status ', a.[Status]) END) AS StatusName,
+                   ISNULL(su.StatusDesc, ISNULL(s.StatusDesc, CASE a.[Status] WHEN 11 THEN @frozen ELSE CONCAT('Status ', a.[Status]) END)) AS StatusName,
                    ISNULL(a.DateMod, a.DateCre) AS DateEdited, ed.AccShort AS Editor, r.ModDesc AS Reason, a.Extension,
                    CAST(CASE WHEN a.DateDel IS NOT NULL THEN 1 ELSE 0 END AS bit) AS Deleted,
                    CAST(CASE WHEN EXISTS (SELECT 1 FROM PropertyMods p WHERE p.IdDoc = a.IDDoc AND p.Lang = a.Lang AND p.V1 = a.V1 AND p.V2 = a.V2 AND p.V3 = a.V3) THEN 1 ELSE 0 END AS bit) AS PropChanges
             FROM DocumentsArchives a
             OUTER APPLY (SELECT TOP 1 StatusDesc FROM [Status] WHERE IDStatus = a.[Status] AND Lang = a.Lang) s
+            OUTER APPLY (SELECT TOP 1 StatusDesc FROM [Status] WHERE IDStatus = a.[Status] AND Lang = @ui) su
             OUTER APPLY (SELECT TOP 1 m.ModDesc FROM Mods m WHERE m.IdDoc = a.IDDoc AND m.Lang = a.Lang AND m.V1 = a.V1 AND m.V2 = a.V2 AND m.V3 = a.V3 ORDER BY m.ModDate DESC) r
             LEFT JOIN Accounts ed ON ed.IdAcc = a.IdMod
             WHERE a.IDDoc = @id AND a.Lang = @lang
-            ORDER BY a.V1 DESC, a.V2 DESC, a.V3 DESC, a.DateMod DESC", new { id, lang })).ToList();
+            ORDER BY a.V1 DESC, a.V2 DESC, a.V3 DESC, a.DateMod DESC", new { id, lang, ui = Ui.Lang(Request), frozen = Ui.Frozen(Ui.Lang(Request)) })).ToList();
         var (_, ap, dbId) = await DocFiles.Paths(con);
         foreach (var r in rows)
         {

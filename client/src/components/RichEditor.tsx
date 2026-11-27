@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState } from 'react';
+import { tr } from '../i18n';
 
 /** Removes everything that could run code (the mail text is edited here and sent to other people). */
 export function sanitizeHtml(html: string): string {
@@ -77,41 +78,41 @@ export default function RichEditor({ html, onChange, minHeight = 300, maxHeight 
 
   return (
     <div className="re">
-      <div className="re-bar" role="toolbar" aria-label="Text formatting">
+      <div className="re-bar" role="toolbar" aria-label={tr('Text formatting')}>
         {B('Undo', '↶', () => exec('undo'))}{B('Redo', '↷', () => exec('redo'))}
         <span className="re-sep" />
-        <select className="re-sel" aria-label="Paragraph style" disabled={source} defaultValue="" onChange={e => { if (e.target.value) exec('formatBlock', e.target.value); e.target.value = ''; }}>
-          <option value="">Style</option><option value="p">Paragraph</option><option value="h2">Heading</option><option value="h3">Sub-heading</option></select>
-        <select className="re-sel" aria-label="Font size" disabled={source} defaultValue="" onChange={e => { if (e.target.value) exec('fontSize', e.target.value); e.target.value = ''; }}>
-          <option value="">Size</option>{FONT_SIZES.map(([n, v]) => <option key={v} value={v}>{n}</option>)}</select>
+        <select className="re-sel" aria-label={tr('Paragraph style')} disabled={source} defaultValue="" onChange={e => { if (e.target.value) exec('formatBlock', e.target.value); e.target.value = ''; }}>
+          <option value="">{tr('Style')}</option><option value="p">{tr('Paragraph')}</option><option value="h2">{tr('Heading')}</option><option value="h3">{tr('Sub-heading')}</option></select>
+        <select className="re-sel" aria-label={tr('Font size')} disabled={source} defaultValue="" onChange={e => { if (e.target.value) exec('fontSize', e.target.value); e.target.value = ''; }}>
+          <option value="">{tr('Size')}</option>{FONT_SIZES.map(([n, v]) => <option key={v} value={v}>{n}</option>)}</select>
         <span className="re-sep" />
-        {B('Bold', <b>B</b>, () => exec('bold'))}{B('Italic', <i>I</i>, () => exec('italic'))}{B('Underline', <u>U</u>, () => exec('underline'))}{B('Strikethrough', <s>S</s>, () => exec('strikeThrough'))}
-        <label className="re-clr" title="Text colour"><span>A</span>
-          <input type="color" defaultValue="#1d4ed8" disabled={source} onMouseDown={saveSel} onChange={e => { restoreSel(); exec('foreColor', e.target.value); }} aria-label="Text colour" /></label>
-        <label className="re-clr hl" title="Highlight"><span>▮</span>
-          <input type="color" defaultValue="#fff3a3" disabled={source} onMouseDown={saveSel} onChange={e => { restoreSel(); exec('hiliteColor', e.target.value); }} aria-label="Highlight colour" /></label>
+        {B('Bold', <b>{tr('B')}</b>, () => exec('bold'))}{B('Italic', <i>{tr('I')}</i>, () => exec('italic'))}{B('Underline', <u>{tr('U')}</u>, () => exec('underline'))}{B('Strikethrough', <s>{tr('S')}</s>, () => exec('strikeThrough'))}
+        <label className="re-clr" title={tr('Text colour')}><span>{tr('A')}</span>
+          <input type="color" defaultValue="#1d4ed8" disabled={source} onMouseDown={saveSel} onChange={e => { restoreSel(); exec('foreColor', e.target.value); }} aria-label={tr('Text colour')} /></label>
+        <label className="re-clr hl" title={tr('Highlight')}><span>▮</span>
+          <input type="color" defaultValue="#fff3a3" disabled={source} onMouseDown={saveSel} onChange={e => { restoreSel(); exec('hiliteColor', e.target.value); }} aria-label={tr('Highlight colour')} /></label>
         <span className="re-sep" />
-        {B('Align left', '⯇', () => exec('justifyLeft'))}{B('Centre', '≡', () => exec('justifyCenter'))}{B('Align right', '⯈', () => exec('justifyRight'))}
+        {B(tr('Align left'), '⯇', () => exec('justifyLeft'))}{B('Centre', '≡', () => exec('justifyCenter'))}{B(tr('Align right'), '⯈', () => exec('justifyRight'))}
         <span className="re-sep" />
-        {B('Bullet list', '•≡', () => exec('insertUnorderedList'))}{B('Numbered list', '1.', () => exec('insertOrderedList'))}
-        {B('Decrease indent', '⇤', () => exec('outdent'))}{B('Increase indent', '⇥', () => exec('indent'))}
+        {B(tr('Bullet list'), '•≡', () => exec('insertUnorderedList'))}{B(tr('Numbered list'), '1.', () => exec('insertOrderedList'))}
+        {B(tr('Decrease indent'), '⇤', () => exec('outdent'))}{B(tr('Increase indent'), '⇥', () => exec('indent'))}
         <span className="re-sep" />
-        {B('Insert link', '🔗', () => { saveSel(); setLink(''); })}{B('Remove link', '⛓', () => exec('unlink'))}
-        {B('Clear formatting', 'Tx', () => exec('removeFormat'))}
+        {B(tr('Insert link'), '🔗', () => { saveSel(); setLink(''); })}{B(tr('Remove link'), '⛓', () => exec('unlink'))}
+        {B(tr('Clear formatting'), 'Tx', () => exec('removeFormat'))}
         <span className="re-grow" />
-        <button type="button" className={`re-btn txt ${source ? 'on' : ''}`} title="Edit the HTML code" onMouseDown={keep} onClick={toggleSource}>{'</>'} HTML</button>
+        <button type="button" className={`re-btn txt ${source ? 'on' : ''}`} title={tr('Edit the HTML code')} onMouseDown={keep} onClick={toggleSource}>{'</>'} {tr('HTML')}</button>
       </div>
       {link !== null && (
         <div className="re-link">
-          <input autoFocus placeholder="https://…" value={link} onChange={e => setLink(e.target.value)} aria-label="Link address"
+          <input autoFocus placeholder={tr('https://…')} value={link} onChange={e => setLink(e.target.value)} aria-label={tr('Link address')}
             onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); applyLink(); } if (e.key === 'Escape') setLink(null); }} />
-          <button type="button" className="btn-primary" style={{ width: 'auto', padding: '6px 14px' }} onClick={applyLink}>Apply</button>
-          <button type="button" className="btn-ghost" onClick={() => setLink(null)}>Cancel</button>
+          <button type="button" className="btn-primary" style={{ width: 'auto', padding: '6px 14px' }} onClick={applyLink}>{tr('Apply')}</button>
+          <button type="button" className="btn-ghost" onClick={() => setLink(null)}>{tr('Cancel')}</button>
         </div>)}
       {source
-        ? <textarea className="re-src" style={{ minHeight, maxHeight }} spellCheck={false} value={src} onChange={e => { setSrc(e.target.value); value.current = e.target.value; onChange(e.target.value); }} aria-label="HTML code" />
+        ? <textarea className="re-src" style={{ minHeight, maxHeight }} spellCheck={false} value={src} onChange={e => { setSrc(e.target.value); value.current = e.target.value; onChange(e.target.value); }} aria-label={tr('HTML code')} />
         : <div ref={mount} className="re-body" style={{ minHeight, maxHeight }} contentEditable suppressContentEditableWarning spellCheck
-            role="textbox" aria-multiline="true" aria-label="E-mail text" onInput={emit} onBlur={emit}
+            role="textbox" aria-multiline="true" aria-label={tr('E-mail text')} onInput={emit} onBlur={emit}
             onPaste={e => {
               e.preventDefault();
               const h = e.clipboardData.getData('text/html'); const t = e.clipboardData.getData('text/plain');

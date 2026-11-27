@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import UserAvatar from './UserAvatar';
 import { api, type PubFeedItem, type PubJob, type WfTaskNote } from '../api';
+import { tr } from '../i18n';
 
 /** Bell in the top bar: publishing queue (live) + a "who published what" timeline, Facebook style (manual p. 109 Publish). */
 
@@ -30,7 +31,7 @@ function dayLabel(iso: string) {
   const a = when(iso); const t = new Date();
   const d0 = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
   const diff = Math.round((d0(t) - d0(a)) / 86400000);
-  return diff <= 0 ? 'Today' : diff === 1 ? 'Yesterday' : diff < 7 ? 'This week' : 'Earlier';
+  return diff <= 0 ? 'Today' : diff === 1 ? 'Yesterday' : diff < 7 ? tr('This week') : 'Earlier';
 }
 const key = (i: PubFeedItem) => `${i.idDoc}-${i.lang}-${i.publishedOn}`;
 
@@ -92,17 +93,17 @@ export default function NotificationBell({ lang }: { lang: string }) {
       for (const j of data.jobs) {
         const was = p.get(j.id);
         if (was && (was === 'queued' || was === 'running') && j.status === 'done') {
-          pushSnack({ ok: true, title: 'Published', text: `“${j.docName}” (${j.lang}, v${j.version}) is now on the web${j.warnings?.length ? ` - note: ${j.warnings[0]}` : ''}.` });
+          pushSnack({ ok: true, title: tr('Published'), text: tr('“{0}” ({1}, v{2}) is now on the web{3}.', j.docName, j.lang, j.version, j.warnings?.length ? ` - note: ${j.warnings[0]}` : '') });
           ['docs', 'doc', 'doc-deep', 'stats', 'groups'].forEach(x => qc.invalidateQueries({ queryKey: [x] }));
         } else if (was && (was === 'queued' || was === 'running') && j.status === 'failed')
-          pushSnack({ ok: false, title: 'Publishing failed', text: `“${j.docName}”: ${j.error ?? 'unknown error'}` });
+          pushSnack({ ok: false, title: tr('Publishing failed'), text: `“${j.docName}”: ${j.error ?? 'unknown error'}` });
       }
     }
     if (ready.current) for (const j of data.jobs) {
       const was = prevMail.current.get(j.id);
       if (j.mailStatus && was !== j.mailStatus) {
-        if (j.mailStatus === 'sent') pushSnack({ ok: true, title: 'E-mail sent', text: `The publish e-mail for “${j.docName}” was sent.` });
-        else if (j.mailStatus === 'failed') pushSnack({ ok: false, title: 'E-mail not sent', text: `“${j.docName}”: ${j.mailError ?? 'the mail server did not accept the message'}` });
+        if (j.mailStatus === 'sent') pushSnack({ ok: true, title: tr('E-mail sent'), text: tr('The publish e-mail for “{0}” was sent.', j.docName) });
+        else if (j.mailStatus === 'failed') pushSnack({ ok: false, title: tr('E-mail not sent'), text: `“${j.docName}”: ${j.mailError ?? 'the mail server did not accept the message'}` });
       }
     }
     prevMail.current.clear(); data.jobs.forEach(j => { if (j.mailStatus) prevMail.current.set(j.id, j.mailStatus); });
@@ -118,8 +119,8 @@ export default function NotificationBell({ lang }: { lang: string }) {
     writeTaskSeen(me, ids);
     if (fresh.length === 0) return;
     const one = fresh.length === 1 ? fresh[0]! : null;
-    const title = one ? `A document is waiting ${TASK_TXT[one.layer] ?? ''}` : `${fresh.length} documents are waiting for you`;
-    const text = one ? `“${one.docName}”${one.workflow ? ` · ${one.workflow}` : ''}${one.startedBy ? ` · from ${one.startedBy}` : ''}` : fresh.slice(0, 3).map(t => `“${t.docName}” ${TASK_TXT[t.layer] ?? ''}`).join('; ') + (fresh.length > 3 ? ' …' : '');
+    const title = one ? tr('A document is waiting {0}', TASK_TXT[one.layer] ?? '') : `${fresh.length} documents are waiting for you`;
+    const text = one ? `“${one.docName}”${one.workflow ? ` · ${one.workflow}` : ''}${one.startedBy ? tr(' · from {0}', one.startedBy) : ''}` : fresh.slice(0, 3).map(t => `“${t.docName}” ${TASK_TXT[t.layer] ?? ''}`).join('; ') + (fresh.length > 3 ? ' …' : '');
     pushSnack({ ok: true, title, text });
     try {
       if ('Notification' in window && Notification.permission === 'granted') {
@@ -160,7 +161,7 @@ export default function NotificationBell({ lang }: { lang: string }) {
   return (
     <div className="nb" ref={box}>
       <button className={`nb-btn ${badge > 0 ? 'nb-shake' : ''} ${open ? 'on' : ''}`} onClick={toggle} aria-haspopup="dialog" aria-expanded={open}
-        aria-label={badge > 0 ? `Notifications, ${badge} new` : 'Notifications'} title="Notifications">
+        aria-label={badge > 0 ? tr('Notifications, {0} new', badge) : tr('Notifications')} title={tr('Notifications')}>
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.7 21a2 2 0 0 1-3.4 0" /></svg>
         {badge > 0 && <span className="nb-badge">{badge > 99 ? '99+' : badge}</span>}
@@ -168,52 +169,52 @@ export default function NotificationBell({ lang }: { lang: string }) {
       </button>
 
       {open && (
-        <div className="nb-panel" role="dialog" aria-label="Notifications">
+        <div className="nb-panel" role="dialog" aria-label={tr('Notifications')}>
           <div className="nb-head">
-            <div><h3>Notifications</h3>
-              <small>{taskTotal > 0 ? `${taskTotal} task${taskTotal === 1 ? '' : 's'} waiting for you · ` : ''}{data ? `${data.total} document${data.total === 1 ? '' : 's'} published in the last ${data.days} days` : 'Loading...'}</small></div>
+            <div><h3>{tr('Notifications')}</h3>
+              <small>{taskTotal > 0 ? tr('{0} task{1} waiting for you · ', taskTotal, taskTotal === 1 ? '' : 's') : ''}{data ? tr('{0} document{1} published in the last {2} days', data.total, data.total === 1 ? '' : 's', data.days) : tr('Loading...')}</small></div>
             <span className="nb-ico" aria-hidden="true">📣</span>
           </div>
 
           <div className="nb-body">
             {tasks.length > 0 && (
               <div className="nb-sec">
-                <div className="nb-sec-h"><span>Waiting for you ({taskTotal})</span><button onClick={() => { setOpen(false); nav('/tasks'); }}>Open My tasks</button></div>
+                <div className="nb-sec-h"><span>{tr('Waiting for you (')}{taskTotal})</span><button onClick={() => { setOpen(false); nav('/tasks'); }}>{tr('Open My tasks')}</button></div>
                 {tasks.slice(0, 8).map(t => (
                   <button key={t.taskId} className={`nb-item nb-task ${t.overdue ? 'late' : ''}`} onClick={() => { setOpen(false); nav('/tasks'); }}>
                     <span className="nb-av"><span className="nb-av-i" style={{ background: t.overdue ? '#d92d20' : '#4f46e5' }}>{TASK_ICO[t.layer] ?? '•'}</span></span>
                     <span className="nb-tx">
                       <span className="nb-line"><b>{t.docName}</b> {TASK_TXT[t.layer] ?? ''}</span>
                       <span className="nb-chips">{t.workflow && <em>{t.workflow}</em>}<em>{t.step || t.layerName}</em><em>{t.lang}</em>{t.due && <em className={t.overdue ? 'late' : ''}>{dueTxt(t)}</em>}</span>
-                      {t.startedBy && <span className="nb-time">from {t.startedBy}{t.assigned ? ` · ${ago(t.assigned)}` : ''}</span>}
+                      {t.startedBy && <span className="nb-time">{tr('from')}{' '}{t.startedBy}{t.assigned ? ` · ${ago(t.assigned)}` : ''}</span>}
                     </span>
                   </button>))}
-                {tasks.length > 8 && <div className="nb-foot" style={{ padding: '4px 10px' }}>+ {tasks.length - 8} more in My tasks</div>}
+                {tasks.length > 8 && <div className="nb-foot" style={{ padding: '4px 10px' }}>+ {tasks.length - 8} {tr('more in My tasks')}</div>}
               </div>
             )}
 
             {(active.length > 0 || finished.length > 0) && (
               <div className="nb-sec">
-                <div className="nb-sec-h"><span>Your publishing</span>{finished.length > 0 && <button onClick={clearDone}>Clear finished</button>}</div>
+                <div className="nb-sec-h"><span>{tr('Your publishing')}</span>{finished.length > 0 && <button onClick={clearDone}>{tr('Clear finished')}</button>}</div>
                 {[...active.slice().reverse(), ...finished].map(j => (
                   <div key={j.id} className={`nb-job ${j.status}`}>
                     <span className="nb-job-ic" aria-hidden="true">
                       {j.status === 'running' ? <span className="nb-spin" /> : j.status === 'queued' ? '🕒' : j.status === 'done' ? '✓' : '!'}</span>
                     <div className="nb-job-tx">
                       <b title={j.docName}>{j.docName}</b>
-                      <small>{j.status === 'queued' ? `Waiting in the queue${j.position > 1 ? ` · position ${j.position}` : ''}` : j.status === 'running' ? 'Publishing now - writing HTML, PDF and original...'
-                        : j.status === 'done' ? `Published · ${j.files} file${j.files === 1 ? '' : 's'}${j.tagsReplaced ? ` · ${j.tagsReplaced} tag${j.tagsReplaced === 1 ? '' : 's'} replaced` : ''}${j.mailStatus ? ` · e-mail ${j.mailStatus === 'failed' ? `failed: ${j.mailError ?? ''}` : j.mailStatus}` : ''}` : j.error}</small>
+                      <small>{j.status === 'queued' ? tr('Waiting in the queue{0}', j.position > 1 ? ` · position ${j.position}` : '') : j.status === 'running' ? tr('Publishing now - writing HTML, PDF and original...')
+                        : j.status === 'done' ? tr('Published · {0} file{1}{2}{3}', j.files, j.files === 1 ? '' : 's', j.tagsReplaced ? ` · ${j.tagsReplaced} tag${j.tagsReplaced === 1 ? '' : 's'} replaced` : '', j.mailStatus ? ` · e-mail ${j.mailStatus === 'failed' ? `failed: ${j.mailError ?? ''}` : j.mailStatus}` : '') : j.error}</small>
                       {j.status === 'running' && <div className="nb-bar"><i /></div>}
                     </div>
-                    {(j.status === 'done' || j.status === 'failed') && <button className="nb-x" onClick={() => dismiss(j)} aria-label="Dismiss" title="Dismiss">×</button>}
+                    {(j.status === 'done' || j.status === 'failed') && <button className="nb-x" onClick={() => dismiss(j)} aria-label={tr('Dismiss')} title={tr('Dismiss')}>×</button>}
                   </div>
                 ))}
               </div>
             )}
 
-            {q.isLoading && <div className="nb-empty">Loading...</div>}
+            {q.isLoading && <div className="nb-empty">{tr('Loading...')}</div>}
             {!q.isLoading && items.length === 0 && (
-              <div className="nb-empty"><div className="nb-empty-ic">🔔</div><b>Nothing published yet</b><small>Published documents of the last {data?.days ?? 30} days show up here.</small></div>
+              <div className="nb-empty"><div className="nb-empty-ic">🔔</div><b>{tr('Nothing published yet')}</b><small>{tr('Published documents of the last')}{' '}{data?.days ?? 30} {tr('days show up here.')}</small></div>
             )}
 
             {groups.map(g => (
@@ -228,21 +229,21 @@ export default function NotificationBell({ lang }: { lang: string }) {
                         <span className="nb-ft nb-ft-ico" title={i.ext ? `.${i.ext}` : 'file'}><FileIcon ext={i.ext} size={26} /></span>
                       </span>
                       <span className="nb-tx">
-                        <span className="nb-line"><b>{mine ? 'You' : i.publishedBy}</b> published <b>{i.docName}</b></span>
+                        <span className="nb-line"><b>{mine ? tr('You') : i.publishedBy}</b> {tr('published')}{' '}<b>{i.docName}</b></span>
                         <span className="nb-chips">
-                          {i.type && <em>{i.type}</em>}<em>v{i.version}</em><em>{i.lang}</em>
+                          {i.type && <em>{i.type}</em>}<em>{tr('v')}{i.version}</em><em>{i.lang}</em>
                           <em className="id">#{i.idDoc}</em>
                         </span>
                         <span className="nb-time" title={full(i.publishedOn)}>🕒 {ago(i.publishedOn)} · {full(i.publishedOn)}</span>
                       </span>
-                      {fresh.has(key(i)) && <span className="nb-dot" aria-label="New" />}
+                      {fresh.has(key(i)) && <span className="nb-dot" aria-label={tr('New')} />}
                     </button>
                   );
                 })}
               </div>
             ))}
           </div>
-          {data && data.total > items.length && <div className="nb-foot">Showing the latest {items.length} of {data.total}</div>}
+          {data && data.total > items.length && <div className="nb-foot">{tr('Showing the latest')}{' '}{items.length} {tr('of')}{' '}{data.total}</div>}
         </div>
       )}
 
@@ -251,7 +252,7 @@ export default function NotificationBell({ lang }: { lang: string }) {
           <div key={s.id} className={`nb-snack ${s.ok ? 'ok' : 'bad'}`} role={s.ok ? 'status' : 'alert'}>
             <span className="nb-snack-ic" aria-hidden="true">{s.ok ? '✓' : '!'}</span>
             <div><b>{s.title}</b><p>{s.text}</p></div>
-            <button onClick={() => setSnacks(l => l.filter(x => x.id !== s.id))} aria-label="Close">×</button>
+            <button onClick={() => setSnacks(l => l.filter(x => x.id !== s.id))} aria-label={tr('Close')}>×</button>
           </div>
         ))}
       </div>

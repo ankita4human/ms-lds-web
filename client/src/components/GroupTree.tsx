@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { GroupNode } from '../api';
 import ContextMenu, { type MenuItem } from './ContextMenu';
 import { downloadCsv } from '../printing';
+import { t, useI18n, tr } from '../i18n';
 
 export type NodeSel = 'none' | 'all' | 'expired' | number;
 export type TreeItem = GroupNode & { children: TreeItem[]; total: number };
@@ -58,10 +59,10 @@ function Row({ node, depth, sel, onSel, open, toggle, onMenu, busy, force, q, on
         <span className="tw" onClick={e => { e.stopPropagation(); if (has) toggle(node.idGroup); }}>{has ? <Chevron open={isOpen} /> : <i className="dotl" />}</span>
         <span className="gi-emoji">{node.idGroup === STANDARD_ID ? '🏛️' : isOpen && has ? '📂' : '📁'}</span>
         <span className="nm">{node.name}</span>
-        {node.doNotPublish && <span className="gflag" title="Not shown on the web">🚫</span>}
-        {node.pubOriginal && <span className="gflag" title="Published as original">📎</span>}
-        {busy && node.idGroup !== STANDARD_ID && <span className="ct ld" aria-label="Counting documents">…</span>}
-        {!busy && node.docCount > 0 && node.idGroup !== STANDARD_ID && <span className="ct" title={`${node.docCount} document(s) in this folder, ${node.total} including sub-groups`}>{node.docCount}</span>}
+        {node.doNotPublish && <span className="gflag" title={tr('Not shown on the web')}>🚫</span>}
+        {node.pubOriginal && <span className="gflag" title={tr('Published as original')}>📎</span>}
+        {busy && node.idGroup !== STANDARD_ID && <span className="ct ld" aria-label={tr('Counting documents')}>…</span>}
+        {!busy && node.docCount > 0 && node.idGroup !== STANDARD_ID && <span className="ct" title={tr('{0} document(s) in this folder, {1} including sub-groups', node.docCount, node.total)}>{node.docCount}</span>}
       </div>
       {isOpen && has && <div className="tree-kids" style={{ ['--c' as string]: color }}>{node.children.map(c => <Row key={c.idGroup} onHover={onHover} node={c} depth={depth + 1} sel={sel} onSel={onSel} open={open} toggle={toggle} onMenu={onMenu} busy={busy} force={force} q={q} />)}</div>}
     </>
@@ -71,7 +72,8 @@ function Row({ node, depth, sel, onSel, open, toggle, onMenu, busy, force, q, on
 /** Keys of the right-click menus (manual p. 12-14). "printTree" is handled inside the tree, the rest by the page. */
 export type GroupMenuKey = 'view' | 'rename' | 'new' | 'delete' | 'weblink' | 'report' | 'order' | 'web' | 'template' | 'pubOriginal' | 'owner';
 
-export default function GroupTreeView({ groups, total, expired, sel, onSel, rootLabel, countsLoading, reveal, isAdmin, canCreateRoot, templateGroup, onAction, onHover }: {
+export default function GroupTreeView(props: Parameters<typeof GroupTreeViewInner>[0]) { useI18n(); return GroupTreeViewInner(props); }
+function GroupTreeViewInner({ groups, total, expired, sel, onSel, rootLabel, countsLoading, reveal, isAdmin, canCreateRoot, templateGroup, onAction, onHover }: {
   groups: GroupNode[]; total: number; expired: number; sel: NodeSel; onSel: (s: NodeSel, includeSub?: boolean) => void; rootLabel: string; countsLoading?: boolean; reveal?: { key: number; ids: number[] };
   isAdmin?: boolean; canCreateRoot?: boolean; templateGroup?: number; onAction?: (key: GroupMenuKey, node: GroupNode | null) => void; onHover?: (id: number | null) => void;
 }) {
@@ -101,33 +103,33 @@ export default function GroupTreeView({ groups, total, expired, sel, onSel, root
   };
   const items = (node: TreeItem | null): MenuItem[] => {
     if (!node) return [
-      { key: 'view', label: 'View all documents', icon: '📚', enabled: true },
-      { key: 'printTree', label: 'Print Tree view (Excel / CSV)', icon: '🖨️', enabled: true },
-      { key: 'new', label: 'New Group', icon: '➕', enabled: !!canCreateRoot, sepBefore: true },
-      { key: 'weblink', label: 'Copy Weblink', icon: '🔗', enabled: true },
-      { key: 'order', label: 'Change Order', icon: '↕️', enabled: true },
+      { key: 'view', label: tr('View all documents'), icon: '📚', enabled: true },
+      { key: 'printTree', label: tr('Print Tree view (Excel / CSV)'), icon: '🖨️', enabled: true },
+      { key: 'new', label: tr('New Group'), icon: '➕', enabled: !!canCreateRoot, sepBefore: true },
+      { key: 'weblink', label: tr('Copy Weblink'), icon: '🔗', enabled: true },
+      { key: 'order', label: tr('Change Order'), icon: '↕️', enabled: true },
     ];
     const std = node.groupType === STANDARD_TYPE, can = node.accessible;
     const tick = (on: boolean | undefined, t: string) => (on ? `✓ ${t}` : t);
     return std ? [
-      { key: 'view', label: 'View all documents', icon: '📚', enabled: true },
-      { key: 'weblink', label: 'Copy Weblink', icon: '🔗', enabled: true, sepBefore: true },
-      { key: 'report', label: 'Print Report', icon: '🖨️', enabled: true },
-      { key: 'order', label: 'Change Order', icon: '↕️', enabled: can },
-      { key: 'web', label: tick(node.doNotPublish, 'Do not view group in the web'), icon: '🚫', enabled: can, sepBefore: true },
-      { key: 'pubOriginal', label: tick(node.pubOriginal, 'Publish as original'), icon: '📎', enabled: !!isAdmin && can },
+      { key: 'view', label: tr('View all documents'), icon: '📚', enabled: true },
+      { key: 'weblink', label: tr('Copy Weblink'), icon: '🔗', enabled: true, sepBefore: true },
+      { key: 'report', label: tr('Print Report'), icon: '🖨️', enabled: true },
+      { key: 'order', label: tr('Change Order'), icon: '↕️', enabled: can },
+      { key: 'web', label: tick(node.doNotPublish, tr('Do not view group in the web')), icon: '🚫', enabled: can, sepBefore: true },
+      { key: 'pubOriginal', label: tick(node.pubOriginal, tr('Publish as original')), icon: '📎', enabled: !!isAdmin && can },
     ] : [
-      { key: 'view', label: 'View all documents', icon: '📚', enabled: true },
-      { key: 'rename', label: 'Rename          F2', icon: '✏️', enabled: can, sepBefore: true },
-      { key: 'new', label: 'New Group', icon: '➕', enabled: can },
-      { key: 'delete', label: 'Delete', icon: '🗑️', enabled: can },
-      { key: 'weblink', label: 'Copy Weblink', icon: '🔗', enabled: true, sepBefore: true },
-      { key: 'report', label: 'Print Report', icon: '🖨️', enabled: true },
-      { key: 'order', label: 'Change Order', icon: '↕️', enabled: can },
-      { key: 'web', label: tick(node.doNotPublish, 'Do not view group in the web'), icon: '🚫', enabled: can, sepBefore: true },
-      { key: 'template', label: tick(templateGroup === node.idGroup, 'Set as Template'), icon: '📐', enabled: !!isAdmin && can },
-      { key: 'pubOriginal', label: tick(node.pubOriginal, 'Publish as original'), icon: '📎', enabled: !!isAdmin && can },
-      { key: 'owner', label: 'Assign Process Owner', icon: '👤', enabled: can },
+      { key: 'view', label: tr('View all documents'), icon: '📚', enabled: true },
+      { key: 'rename', label: tr('Rename          F2'), icon: '✏️', enabled: can, sepBefore: true },
+      { key: 'new', label: tr('New Group'), icon: '➕', enabled: can },
+      { key: 'delete', label: tr('Delete'), icon: '🗑️', enabled: can },
+      { key: 'weblink', label: tr('Copy Weblink'), icon: '🔗', enabled: true, sepBefore: true },
+      { key: 'report', label: tr('Print Report'), icon: '🖨️', enabled: true },
+      { key: 'order', label: tr('Change Order'), icon: '↕️', enabled: can },
+      { key: 'web', label: tick(node.doNotPublish, tr('Do not view group in the web')), icon: '🚫', enabled: can, sepBefore: true },
+      { key: 'template', label: tick(templateGroup === node.idGroup, tr('Set as Template')), icon: '📐', enabled: !!isAdmin && can },
+      { key: 'pubOriginal', label: tick(node.pubOriginal, tr('Publish as original')), icon: '📎', enabled: !!isAdmin && can },
+      { key: 'owner', label: tr('Assign Process Owner'), icon: '👤', enabled: can },
     ];
   };
   /** "Print Tree view": the groups that are visible right now (expanded folders only) as an Excel-readable CSV. */
@@ -154,23 +156,23 @@ export default function GroupTreeView({ groups, total, expired, sel, onSel, root
   };
   return (
     <div className="card tree-card" tabIndex={0} onKeyDown={onKey} style={{ outline: 'none' }} onContextMenu={e => { if (e.target === e.currentTarget) openMenu(e, null); }}>
-      <div className="tree-title" onContextMenu={e => openMenu(e, null)} title="Right-click for the root menu">
+      <div className="tree-title" onContextMenu={e => openMenu(e, null)} title={tr('Right-click for the root menu')}>
         <span className="tt-l"><span className="tt-ico" aria-hidden="true">🗂️</span><span>{rootLabel}</span></span>
         <span className="tt-btns">
-          <button className="tt-btn" onClick={expandAll} title="Expand all folders" aria-label="Expand all folders"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M7 8l5-5 5 5M7 16l5 5 5-5" /></svg></button>
-          <button className="tt-btn" onClick={() => setOpen(new Set())} title="Collapse all folders" aria-label="Collapse all folders"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M7 4l5 5 5-5M7 20l5-5 5 5" /></svg></button>
+          <button className="tt-btn" onClick={expandAll} title={t('doc.expandAll')} aria-label={t('doc.expandAll')}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M7 8l5-5 5 5M7 16l5 5 5-5" /></svg></button>
+          <button className="tt-btn" onClick={() => setOpen(new Set())} title={t('doc.collapseAll')} aria-label={t('doc.collapseAll')}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M7 4l5 5 5-5M7 20l5-5 5 5" /></svg></button>
         </span>
       </div>
       <div className="tree-search"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
-        <input value={fq} onChange={e => setFq(e.target.value)} placeholder="Find a folder…" aria-label="Find a folder" />{fq && <button onClick={() => setFq('')} aria-label="Clear">×</button>}</div>
+        <input value={fq} onChange={e => setFq(e.target.value)} placeholder={t('doc.findFolder')} aria-label={t('doc.findFolder')} />{fq && <button onClick={() => setFq('')} aria-label={tr('Clear')}>×</button>}</div>
       <div className={`tree-row top all ${sel === 'all' ? 'sel' : ''}`} onClick={() => onSel('all')} onContextMenu={e => openMenu(e, null)}>
-        <span className="tw" /><span className="gi-emoji">🗂️</span><span className="nm">All documents</span><span className={`ct ${countsLoading ? 'ld' : ''}`}>{countsLoading ? '…' : total}</span>
+        <span className="tw" /><span className="gi-emoji">🗂️</span><span className="nm">{t('doc.all')}</span>{total > 0 && <span className="ct">{total}</span>}
       </div>
       {roots.map(r => <Row key={r.idGroup} onHover={onHover} node={r} depth={0} sel={sel} onSel={onSel} open={open} toggle={toggle} onMenu={openMenu} busy={countsLoading} force={!!q} q={q} />)}
-      {q && roots.length === 0 && <div className="mh" style={{ padding: '10px 14px' }}>No folder matches “{fq}”.</div>}
+      {q && roots.length === 0 && <div className="mh" style={{ padding: '10px 14px' }}>{tr('No folder matches “')}{fq}”.</div>}
       <div className="sep" style={{ height: 1, background: 'var(--line)', margin: '8px 4px' }} />
       <div className={`tree-row top exp ${sel === 'expired' ? 'sel' : ''}`} onClick={() => onSel('expired')}>
-        <span className="tw" /><span className="gi-emoji">⛔</span><span className="nm">Expired documents</span><span className={`ct ${countsLoading ? 'ld' : ''}`}>{countsLoading ? '…' : expired}</span>
+        <span className="tw" /><span className="gi-emoji">⛔</span><span className="nm">{t('doc.expired')}</span>{expired > 0 && <span className="ct">{expired}</span>}
       </div>
       {ctx && <ContextMenu x={ctx.x} y={ctx.y} items={items(ctx.node)} onPick={pick} onClose={() => setCtx(null)} />}
     </div>

@@ -3,6 +3,8 @@ import ReactDOM from 'react-dom/client';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { auth } from './api';
+import { onUiLangChange, getUiLang, startDomTranslate } from './i18n';
+import { useSyncExternalStore } from 'react';
 import Login from './Login';
 import Shell from './Shell';
 import { PageLoader } from './components/Loader';
@@ -31,11 +33,17 @@ import { LangProvider } from './LangContext';
 const qc = new QueryClient({ defaultOptions: { queries: { staleTime: 5 * 60_000, gcTime: 15 * 60_000, refetchOnWindowFocus: false, retry: 1 } } });
 // A different login must never see the cached data (name, rights, tasks, notifications) of the previous user.
 window.addEventListener('pl-auth', () => qc.clear());
+// A new interface language changes the names of statuses and types that come from the database: reload what is on screen.
+onUiLangChange(() => { void qc.invalidateQueries(); });
+startDomTranslate();
+/** The whole page is built again when the interface language changes, so every text is taken from the new language file. */
+function LangKey({ children }: { children: React.ReactNode }) { const ui = useSyncExternalStore(onUiLangChange, getUiLang); return <React.Fragment key={ui}>{children}</React.Fragment>; }
 const Guard = ({ children }: { children: React.ReactElement }) => (auth.get() ? children : <Navigate to="/login" replace />);
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <QueryClientProvider client={qc}>
     <BrowserRouter>
+      <LangKey>
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route element={<Guard><LangProvider><Shell /></LangProvider></Guard>}>
@@ -56,6 +64,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
           <Route path="options/distribution" element={<Suspense fallback={<PageLoader />}><EmailDistribution /></Suspense>} />
         </Route>
       </Routes>
+      </LangKey>
     </BrowserRouter>
   </QueryClientProvider>
 );

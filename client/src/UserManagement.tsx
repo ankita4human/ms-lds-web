@@ -9,6 +9,7 @@ import Toast from './components/Toast';
 import { IconUsers } from './components/Icons';
 import PageHero from './components/PageHero';
 import { Switch, SaveBar, useSaveShortcut } from './components/FormBits';
+import { tr } from './i18n';
 
 type Msg = { ok: boolean; t: string } | null;
 
@@ -24,15 +25,15 @@ function Pick({ title, legend, items, onOk, onCancel, extra, busy }: {
         <div className="modal-head"><b>{title}</b></div>
         <div className="um-pick-body">
           {legend && <div className="um-legend">{legend}</div>}
-          <input placeholder="Search…" value={q} onChange={e => setQ(e.target.value)} autoFocus />
+          <input placeholder={tr('Search…')} value={q} onChange={e => setQ(e.target.value)} autoFocus />
           <div className="um-list">
             {shown.map(i => <div key={i.id} className={`um-item ${sel === i.id ? 'sel' : ''}`} onClick={() => setSel(i.id)} onDoubleClick={() => onOk(i.id)}>{i.name}</div>)}
-            {shown.length === 0 && <div className="mh" style={{ padding: 8 }}>Nothing to choose.</div>}
+            {shown.length === 0 && <div className="mh" style={{ padding: 8 }}>{tr('Nothing to choose.')}</div>}
           </div>
           {extra}
         </div>
         <div className="modal-foot">
-          <button className="btn-ghost" onClick={onCancel} disabled={busy}>Cancel</button>
+          <button className="btn-ghost" onClick={onCancel} disabled={busy}>{tr('Cancel')}</button>
           <button className="btn-primary" disabled={sel === null || busy} onClick={() => sel !== null && onOk(sel)}>{busy ? <Spinner /> : 'OK'}</button>
         </div>
       </div>
@@ -43,21 +44,21 @@ function Pick({ title, legend, items, onOk, onCancel, extra, busy }: {
 function PasswordDialog({ onOk, onCancel, busy, error }: { onOk: (p: string) => void; onCancel: () => void; busy: boolean; error: string | null }) {
   const [a, setA] = useState(''); const [b, setB] = useState(''); const [show, setShow] = useState(false);
   const score = (a.length >= 8 ? 1 : 0) + (/[a-z]/i.test(a) && /\d/.test(a) ? 1 : 0) + (/[^a-z0-9]/i.test(a) ? 1 : 0) + (a.length >= 12 ? 1 : 0);
-  const local = a && b && a !== b ? 'The two entries are not identical.' : null;
+  const local = a && b && a !== b ? tr('The two entries are not identical.') : null;
   return (
     <div className="modal-back" style={{ zIndex: 90 }} onMouseDown={() => !busy && onCancel()}>
-      <div className="modal um-pick" role="dialog" aria-modal="true" aria-label="Change password" onMouseDown={e => e.stopPropagation()}>
-        <div className="modal-head"><b>Change password</b></div>
+      <div className="modal um-pick" role="dialog" aria-modal="true" aria-label={tr('Change password')} onMouseDown={e => e.stopPropagation()}>
+        <div className="modal-head"><b>{tr('Change password')}</b></div>
         <div className="um-pick-body">
-          <label className="fm-row">New password<input type={show ? 'text' : 'password'} value={a} onChange={e => setA(e.target.value)} autoFocus autoComplete="new-password" /></label>
-          <label className="fm-row">Repeat<input type={show ? 'text' : 'password'} value={b} onChange={e => setB(e.target.value)} autoComplete="new-password" /></label>
-          <label className="fm-chk"><input type="checkbox" checked={show} onChange={e => setShow(e.target.checked)} />Show password</label>
-          <div className="fx-strength" aria-hidden="true"><i className={`s${score}`} /></div><small className="mh">{['Too short','Weak','Fair','Good','Strong'][score]} · at least 8 characters with letters, numbers and special characters.</small>
+          <label className="fm-row">{tr('New password')}<input type={show ? 'text' : 'password'} value={a} onChange={e => setA(e.target.value)} autoFocus autoComplete="new-password" /></label>
+          <label className="fm-row">{tr('Repeat')}<input type={show ? 'text' : 'password'} value={b} onChange={e => setB(e.target.value)} autoComplete="new-password" /></label>
+          <label className="fm-chk"><input type="checkbox" checked={show} onChange={e => setShow(e.target.checked)} />{tr('Show password')}</label>
+          <div className="fx-strength" aria-hidden="true"><i className={`s${score}`} /></div><small className="mh">{[tr('Too short'),tr('Weak'),tr('Fair'),tr('Good'),tr('Strong')][score]} {tr('· at least 8 characters with letters, numbers and special characters.')}</small>
           {(local || error) && <div className="alert" role="alert">{local ?? error}</div>}
         </div>
         <div className="modal-foot">
-          <button className="btn-ghost" onClick={onCancel} disabled={busy}>Cancel</button>
-          <button className="btn-primary" disabled={busy || !a || a !== b} onClick={() => onOk(a)}>{busy ? <Spinner /> : 'Change'}</button>
+          <button className="btn-ghost" onClick={onCancel} disabled={busy}>{tr('Cancel')}</button>
+          <button className="btn-primary" disabled={busy || !a || a !== b} onClick={() => onOk(a)}>{busy ? <Spinner /> : tr('Change')}</button>
         </div>
       </div>
     </div>
@@ -68,13 +69,13 @@ function PasswordDialog({ onOk, onCancel, busy, error }: { onOk: (p: string) => 
 function RightPicker({ lang, legend, taken, onOk, onCancel, busy }: { lang: string; legend: string; taken: number[]; onOk: (rcod: number, rvalue: string) => void; onCancel: () => void; busy: boolean }) {
   const cat = useQuery({ queryKey: ['rights-catalog', lang], queryFn: () => api.rightsCatalog(lang) });
   const [pending, setPending] = useState<number | null>(null);
-  if (!cat.data) return <div className="modal-back" style={{ zIndex: 90 }}><div className="modal um-pick"><PageLoader compact label="Loading rights" /></div></div>;
+  if (!cat.data) return <div className="modal-back" style={{ zIndex: 90 }}><div className="modal um-pick"><PageLoader compact label={tr('Loading rights')} /></div></div>;
   if (pending !== null) {
-    return <Pick title="Choose the group for 'Single group'" busy={busy} onCancel={() => setPending(null)}
+    return <Pick title={tr('Choose the group for \'Single group\'')} busy={busy} onCancel={() => setPending(null)}
       items={cat.data.groups.map(g => ({ id: g.id, name: g.name ?? String(g.id) }))}
       onOk={id => onOk(pending, String(id))} />;
   }
-  return <Pick title="Choose Rights" legend={legend} busy={busy} onCancel={onCancel} items={cat.data.rights.filter(r => r.id === cat.data!.singleGroupCode || !taken.includes(r.id))}
+  return <Pick title={tr('Choose Rights')} legend={legend} busy={busy} onCancel={onCancel} items={cat.data.rights.filter(r => r.id === cat.data!.singleGroupCode || !taken.includes(r.id))}
     onOk={id => id === cat.data!.singleGroupCode ? setPending(id) : onOk(id, '')} />;
 }
 
@@ -91,17 +92,17 @@ function Panel({ title, icon, items, onAdd, onRemove, busy, empty, avatar, readO
   return (
     <div className="fx-panel">
       <div className="fx-panel-head"><b><span>{icon}</span>{title}<em>{items.length}</em></b>
-        {onAdd && <button className="fx-add" onClick={onAdd} disabled={busy || readOnly}>＋ Add</button>}</div>
-      {items.length > 6 && <input className="fx-mini" placeholder={`Find in ${title.toLowerCase()}…`} value={q} onChange={e => setQ(e.target.value)} />}
+        {onAdd && <button className="fx-add" onClick={onAdd} disabled={busy || readOnly}>{tr('＋ Add')}</button>}</div>
+      {items.length > 6 && <input className="fx-mini" placeholder={tr('Find in {0}…', title.toLowerCase())} value={q} onChange={e => setQ(e.target.value)} />}
       <div className="fx-rows">
         {shown.map(i => (
           <div key={i.id} className="fx-row">
             {avatar && <span className="um-av" style={{ background: avColor(i.name) }}>{initials(i.name)}</span>}
             <span className="nm">{i.name}</span>
-            {onRemove && <button aria-label={`Remove ${i.name}`} title="Remove" disabled={busy || readOnly} onClick={() => onRemove(i.id)}>×</button>}
+            {onRemove && <button aria-label={tr('Remove {0}', i.name)} title={tr('Remove')} disabled={busy || readOnly} onClick={() => onRemove(i.id)}>×</button>}
           </div>
         ))}
-        {shown.length === 0 && <div className="fx-empty">{items.length ? 'Nothing matches.' : empty}</div>}
+        {shown.length === 0 && <div className="fx-empty">{items.length ? tr('Nothing matches.') : empty}</div>}
       </div>
     </div>
   );
@@ -146,18 +147,18 @@ export default function UserManagement() {
   const sync = cur?.head.isSync ?? false;
   const dirty = uid !== null && JSON.stringify(f) !== base;
   const set = (p: Partial<typeof f>) => setF(x => ({ ...x, ...p }));
-  const errName = touched && !f.name.trim() ? 'Please enter the user name.' : '';
-  const errLogin = touched && !f.login.trim() ? 'Please enter the login name.' : '';
-  const errMail = !okMail(f.email) ? 'This e-mail address does not look right.' : '';
+  const errName = touched && !f.name.trim() ? tr('Please enter the user name.') : '';
+  const errLogin = touched && !f.login.trim() ? tr('Please enter the login name.') : '';
+  const errMail = !okMail(f.email) ? tr('This e-mail address does not look right.') : '';
   const openUser = (id: number | 'new' | null) => { if (dirty && id !== uid) setPendingU(id); else { setTouched(false); setUid(id); } };
 
   const saveUser = () => run(async () => {
     setTouched(true);
-    if (!f.name.trim() || !f.login.trim()) throw new Error('User name and login name are required.');
+    if (!f.name.trim() || !f.login.trim()) throw new Error(tr('User name and login name are required.'));
     if (errMail) throw new Error(errMail);
     const r = uid === 'new' ? await api.createUser(f) : await api.updateUser(uid as number, f);
     await refresh(); setBase(JSON.stringify(f)); setUid(r.idAcc);
-    setMsg({ ok: true, t: uid === 'new' ? 'User created (inactive). Set a password, assign rights and activate the user.' : 'User saved.' });
+    setMsg({ ok: true, t: uid === 'new' ? tr('User created (inactive). Set a password, assign rights and activate the user.') : tr('User saved.') });
   });
   const simulate = () => run(async () => { const r = await api.simulateUser(uid as number); simulation.start(r.token, r.login); location.assign('/documents'); });
   const resetU = () => { try { setF(JSON.parse(base)); setTouched(false); } catch { /* none */ } };
@@ -182,10 +183,10 @@ export default function UserManagement() {
   const gdirty = gid !== null && gname !== gbase;
   const openGroup = (id: number | 'new' | null) => { if (gdirty && id !== gid) setPendingG(id); else setGid(id); };
   const saveGroup = () => run(async () => {
-    if (!gname.trim()) throw new Error('Please enter a group name.');
+    if (!gname.trim()) throw new Error(tr('Please enter a group name.'));
     if (gid === 'new') { const r = await api.createUserGroup(gname); await refresh(); setGbase(gname); setGid(r.id); }
     else if (typeof gid === 'number') { await api.renameUserGroup(gid, gname); await refresh(); setGbase(gname); }
-    setMsg({ ok: true, t: 'User group saved.' });
+    setMsg({ ok: true, t: tr('User group saved.') });
   });
   const glist = (groups.data ?? []).filter(g => !gq.trim() || g.name.toLowerCase().includes(gq.trim().toLowerCase()));
   useSaveShortcut(() => { if (busy) return; if (tab === 'user' && dirty) void saveUser(); else if (tab === 'group' && gdirty) void saveGroup(); }, true);
@@ -198,96 +199,96 @@ export default function UserManagement() {
 
   return (
     <div className="um">
-      <PageHero icon={<IconUsers />} title="User management" sub="Users, user groups and their rights"
+      <PageHero icon={<IconUsers />} title={tr('User management')} sub={tr('Users, user groups and their rights')}
         chips={[{ n: users.data ? nActive : '–', label: 'active' }, { n: users.data ? nAll : '–', label: 'users' }, { n: groups.data?.length ?? '–', label: 'groups' }]} />
       <div className="um-tabs" role="tablist">
-        <button role="tab" aria-selected={tab === 'user'} className={tab === 'user' ? 'on' : ''} onClick={() => { setTab('user'); setMsg(null); }}>👤 Users</button>
-        <button role="tab" aria-selected={tab === 'group'} className={tab === 'group' ? 'on' : ''} onClick={() => { setTab('group'); setMsg(null); }}>👥 User Groups</button>
+        <button role="tab" aria-selected={tab === 'user'} className={tab === 'user' ? 'on' : ''} onClick={() => { setTab('user'); setMsg(null); }}>{tr('👤 Users')}</button>
+        <button role="tab" aria-selected={tab === 'group'} className={tab === 'group' ? 'on' : ''} onClick={() => { setTab('group'); setMsg(null); }}>{tr('👥 User Groups')}</button>
       </div>
 
       {tab === 'user' && (
         <div className="fx">
           <aside className="card fx-list">
-            <button className="fx-new" onClick={() => openUser('new')}><span>＋</span> New user</button>
-            <div className="fx-search"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg><input value={uq} onChange={e => setUq(e.target.value)} placeholder="Search name or login" aria-label="Search users" /></div>
+            <button className="fx-new" onClick={() => openUser('new')}><span>＋</span> {tr('New user')}</button>
+            <div className="fx-search"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg><input value={uq} onChange={e => setUq(e.target.value)} placeholder={tr('Search name or login')} aria-label={tr('Search users')} /></div>
             <div className="fx-seg" role="tablist">
-              {([['all', 'All', nAll], ['active', 'Active', nActive], ['inactive', 'Inactive', nAll - nActive]] as ['all' | 'active' | 'inactive', string, number][]).map(([k, l, n]) =>
+              {([['all', tr('All'), nAll], ['active', tr('Active'), nActive], ['inactive', tr('Inactive'), nAll - nActive]] as ['all' | 'active' | 'inactive', string, number][]).map(([k, l, n]) =>
                 <button key={k} role="tab" aria-selected={status === k} className={status === k ? 'on' : ''} onClick={() => setStatus(k)}>{l}<em>{n}</em></button>)}
             </div>
             <div className="fx-items">
-              {users.isLoading && <PageLoader compact label="Loading users" />}
+              {users.isLoading && <PageLoader compact label={tr('Loading users')} />}
               {ulist.map(u => (
                 <button key={u.idAcc} className={`fx-item ${uid === u.idAcc ? 'sel' : ''} ${u.active ? '' : 'inactive'}`} onClick={() => openUser(u.idAcc)}>
                   <span className="um-av" style={{ background: avColor(u.name) }}>{initials(u.name)}</span>
                   <span className="tx"><b>{u.name}</b><small>{u.login}</small></span>
-                  <i className={`um-dot ${u.active ? 'on' : ''}`} title={u.active ? 'Active' : 'Inactive'} />
+                  <i className={`um-dot ${u.active ? 'on' : ''}`} title={u.active ? tr('Active') : tr('Inactive')} />
                 </button>
               ))}
-              {users.data && ulist.length === 0 && <div className="fx-empty">No users match.</div>}
+              {users.data && ulist.length === 0 && <div className="fx-empty">{tr('No users match.')}</div>}
             </div>
           </aside>
 
           <section className="card fx-edit">
             {uid === null ? (
-              <div className="fx-hero"><div className="big">🧑‍💼</div><h3>Select a user or add a new one</h3>
-                <p>Manage logins, rights and user groups. Rights can also be copied from another user.</p>
-                <button className="btn-primary" onClick={() => openUser('new')}>＋ New user</button></div>
+              <div className="fx-hero"><div className="big">🧑‍💼</div><h3>{tr('Select a user or add a new one')}</h3>
+                <p>{tr('Manage logins, rights and user groups. Rights can also be copied from another user.')}</p>
+                <button className="btn-primary" onClick={() => openUser('new')}>{tr('＋ New user')}</button></div>
             ) : (<>
               <div className="fx-head">
                 <div className="fx-who">
                   <span className="um-av big" style={{ background: avColor(f.name || '?') }}>{initials(f.name || '?')}</span>
-                  <div className="who-t"><h3>{isNew ? 'New user' : (f.name || 'User')}</h3>
+                  <div className="who-t"><h3>{isNew ? tr('New user') : (f.name || tr('User'))}</h3>
                     <div className="tags">
-                      <span className={`um-badge ${f.active ? 'on' : ''}`}>{f.active ? 'Active' : 'Inactive'}</span>
-                      {f.processOwner && <span className="fx-tag">Process owner</span>}
-                      {f.ntAuth && <span className="fx-tag">Windows login</span>}
-                      {sync && <span className="fx-tag">Synchronised</span>}
-                      {cur?.head.lastLogin && !isNew && <small className="mh">Last login {new Date(cur.head.lastLogin).toLocaleString()}</small>}
+                      <span className={`um-badge ${f.active ? 'on' : ''}`}>{f.active ? tr('Active') : tr('Inactive')}</span>
+                      {f.processOwner && <span className="fx-tag">{tr('Process owner')}</span>}
+                      {f.ntAuth && <span className="fx-tag">{tr('Windows login')}</span>}
+                      {sync && <span className="fx-tag">{tr('Synchronised')}</span>}
+                      {cur?.head.lastLogin && !isNew && <small className="mh">{tr('Last login')}{' '}{new Date(cur.head.lastLogin).toLocaleString()}</small>}
                     </div></div>
                 </div>
                 {!isNew && (
                   <div className="fx-tools">
-                    <button className="btn-ghost" disabled={busy} onClick={() => { setPwdErr(null); setDlg('pwd'); }}>🔑 Change password</button>
-                    <button className="btn-ghost" disabled={busy} onClick={() => setDlg('all')}>🛡 All rights</button>
-                    <button className="btn-ghost" disabled={busy} onClick={() => setDlg('copy')}>📋 Copy rights from…</button>
-                    <button className="btn-ghost" disabled={busy || !f.active} onClick={simulate} title="Work as this user (right Simulation)">🎭 Simulate</button>
-                    <button className="btn-ghost" disabled={busy} onClick={() => run(async () => { await downloadUserRights(lang); setMsg({ ok: true, t: 'Rights overview exported (MS-LDS-User-Rights.csv).' }); })}>⬇ Export rights</button>
+                    <button className="btn-ghost" disabled={busy} onClick={() => { setPwdErr(null); setDlg('pwd'); }}>{tr('🔑 Change password')}</button>
+                    <button className="btn-ghost" disabled={busy} onClick={() => setDlg('all')}>{tr('🛡 All rights')}</button>
+                    <button className="btn-ghost" disabled={busy} onClick={() => setDlg('copy')}>{tr('📋 Copy rights from…')}</button>
+                    <button className="btn-ghost" disabled={busy || !f.active} onClick={simulate} title={tr('Work as this user (right Simulation)')}>{tr('🎭 Simulate')}</button>
+                    <button className="btn-ghost" disabled={busy} onClick={() => run(async () => { await downloadUserRights(lang); setMsg({ ok: true, t: tr('Rights overview exported (MS-LDS-User-Rights.csv).') }); })}>{tr('⬇ Export rights')}</button>
                   </div>)}
               </div>
 
               <div className="fx-pane">
                 <div className="fx-grid2">
-                  <div className="fx-field"><div className="fx-lbl">User name<span className="fx-lbl-tools"><em>{f.name.length}/50</em></span></div>
+                  <div className="fx-field"><div className="fx-lbl">{tr('User name')}<span className="fx-lbl-tools"><em>{f.name.length}/50</em></span></div>
                     <input className="fx-in" value={f.name} maxLength={50} aria-invalid={!!errName} onChange={e => set({ name: e.target.value })} onBlur={() => setTouched(true)} />
                     {errName && <div className="fx-err">{errName}</div>}</div>
-                  <div className="fx-field"><div className="fx-lbl">Login name<span className="fx-lbl-tools"><em>{f.login.length}/30</em></span></div>
+                  <div className="fx-field"><div className="fx-lbl">{tr('Login name')}<span className="fx-lbl-tools"><em>{f.login.length}/30</em></span></div>
                     <input className="fx-in" value={f.login} maxLength={30} autoComplete="off" aria-invalid={!!errLogin} onChange={e => set({ login: e.target.value })} onBlur={() => setTouched(true)} />
                     {errLogin && <div className="fx-err">{errLogin}</div>}</div>
-                  <div className="fx-field"><div className="fx-lbl">E-mail</div>
+                  <div className="fx-field"><div className="fx-lbl">{tr('E-mail')}</div>
                     <div className="fx-mail"><input className="fx-in" type="email" value={f.email} maxLength={100} aria-invalid={!!errMail} onChange={e => set({ email: e.target.value })} />
-                      <a className="btn-ghost" href={f.email && !errMail ? `mailto:${f.email}` : undefined} aria-disabled={!f.email || !!errMail} title="Write an e-mail">✉</a></div>
+                      <a className="btn-ghost" href={f.email && !errMail ? `mailto:${f.email}` : undefined} aria-disabled={!f.email || !!errMail} title={tr('Write an e-mail')}>✉</a></div>
                     {errMail && <div className="fx-err">{errMail}</div>}</div>
                 </div>
                 <div className="fx-switches col">
-                  <Switch checked={f.active} disabled={sync} onChange={v => set({ active: v })} label="Active" desc={sync ? 'Managed by the directory synchronisation.' : 'Only active users can log in. A new user needs a password first.'} />
-                  <Switch checked={f.processOwner} onChange={v => set({ processOwner: v })} label="Process owner" desc="Can be chosen as process owner of documents." />
-                  <Switch checked={f.ntAuth} onChange={v => set({ ntAuth: v })} label="Windows (NT) authentication" desc="Log in with the Windows account instead of a password." />
+                  <Switch checked={f.active} disabled={sync} onChange={v => set({ active: v })} label={tr('Active')} desc={sync ? tr('Managed by the directory synchronisation.') : tr('Only active users can log in. A new user needs a password first.')} />
+                  <Switch checked={f.processOwner} onChange={v => set({ processOwner: v })} label={tr('Process owner')} desc={tr('Can be chosen as process owner of documents.')} />
+                  <Switch checked={f.ntAuth} onChange={v => set({ ntAuth: v })} label={tr('Windows (NT) authentication')} desc={tr('Log in with the Windows account instead of a password.')} />
                 </div>
 
                 {!isNew && cur && (
                   <div className="fx-two">
-                    <Panel title="User rights" icon="🛡" items={cur.rights} busy={busy} empty="No own rights yet." onAdd={() => setDlg('right')}
-                      onRemove={id => { const r = cur.rights.find(x => x.id === id); if (r) askRemove('Remove right?', <>The right <b>{r.name}</b> will be removed from <b>{f.name}</b>.</>, async () => { await api.delUserRight(uid as number, r.id); await refresh(); setMsg({ ok: true, t: `Right "${r.name}" removed.` }); }); }} />
-                    <Panel title="User groups" icon="👥" items={cur.groups} busy={busy} empty="Not in any user group." onAdd={() => setDlg('group')}
-                      onRemove={id => { const g = cur.groups.find(x => x.id === id); if (g) askRemove('Remove from group?', <><b>{f.name}</b> will be removed from the user group <b>{g.name}</b>.</>, async () => { await api.delUserFromGroup(uid as number, g.id); await refresh(); setMsg({ ok: true, t: `Removed from group "${g.name}".` }); }); }} />
+                    <Panel title={tr('User rights')} icon="🛡" items={cur.rights} busy={busy} empty={tr('No own rights yet.')} onAdd={() => setDlg('right')}
+                      onRemove={id => { const r = cur.rights.find(x => x.id === id); if (r) askRemove(tr('Remove right?'), <>{tr('The right')}{' '}<b>{r.name}</b> {tr('will be removed from')}{' '}<b>{f.name}</b>.</>, async () => { await api.delUserRight(uid as number, r.id); await refresh(); setMsg({ ok: true, t: tr('Right "{0}" removed.', r.name) }); }); }} />
+                    <Panel title={tr('User groups')} icon="👥" items={cur.groups} busy={busy} empty={tr('Not in any user group.')} onAdd={() => setDlg('group')}
+                      onRemove={id => { const g = cur.groups.find(x => x.id === id); if (g) askRemove(tr('Remove from group?'), <><b>{f.name}</b> {tr('will be removed from the user group')}{' '}<b>{g.name}</b>.</>, async () => { await api.delUserFromGroup(uid as number, g.id); await refresh(); setMsg({ ok: true, t: tr('Removed from group "{0}".', g.name) }); }); }} />
                   </div>
                 )}
-                {isNew && <div className="fx-hint">After saving, rights and user groups can be assigned. A new user is always inactive until a password has been set and the user is activated.</div>}
+                {isNew && <div className="fx-hint">{tr('After saving, rights and user groups can be assigned. A new user is always inactive until a password has been set and the user is activated.')}</div>}
               </div>
 
               <SaveBar dirty={dirty} busy={busy} canSave={!!f.name.trim() && !!f.login.trim() && !errMail} onSave={() => void saveUser()} onReset={resetU}>
-                {!isNew && <button className="btn-ghost danger" disabled={busy || sync} onClick={() => setDlg('del')} title={sync ? 'Synchronised users cannot be deleted' : 'Delete user'}>Delete</button>}
-                <button className="btn-ghost" onClick={() => nav('/documents')}>Close</button>
+                {!isNew && <button className="btn-ghost danger" disabled={busy || sync} onClick={() => setDlg('del')} title={sync ? tr('Synchronised users cannot be deleted') : tr('Delete user')}>{tr('Delete')}</button>}
+                <button className="btn-ghost" onClick={() => nav('/documents')}>{tr('Close')}</button>
               </SaveBar>
             </>)}
           </section>
@@ -297,39 +298,39 @@ export default function UserManagement() {
       {tab === 'group' && (
         <div className="fx">
           <aside className="card fx-list">
-            <button className="fx-new" onClick={() => openGroup('new')}><span>＋</span> New user group</button>
-            <div className="fx-search"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg><input value={gq} onChange={e => setGq(e.target.value)} placeholder="Search groups" aria-label="Search groups" /></div>
+            <button className="fx-new" onClick={() => openGroup('new')}><span>＋</span> {tr('New user group')}</button>
+            <div className="fx-search"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg><input value={gq} onChange={e => setGq(e.target.value)} placeholder={tr('Search groups')} aria-label={tr('Search groups')} /></div>
             <div className="fx-items">
-              {groups.isLoading && <PageLoader compact label="Loading groups" />}
+              {groups.isLoading && <PageLoader compact label={tr('Loading groups')} />}
               {glist.map(g => (
                 <button key={g.id} className={`fx-item ${gid === g.id ? 'sel' : ''}`} onClick={() => openGroup(g.id)}>
                   <span className="um-av grp">{initials(g.name)}</span><span className="tx"><b>{g.name}</b></span></button>))}
-              {groups.data && glist.length === 0 && <div className="fx-empty">No user groups.</div>}
+              {groups.data && glist.length === 0 && <div className="fx-empty">{tr('No user groups.')}</div>}
             </div>
           </aside>
           <section className="card fx-edit">
             {gid === null ? (
-              <div className="fx-hero"><div className="big">👥</div><h3>Select a user group or add a new one</h3>
-                <p>Rights given to a group apply to every member of that group.</p>
-                <button className="btn-primary" onClick={() => openGroup('new')}>＋ New user group</button></div>
+              <div className="fx-hero"><div className="big">👥</div><h3>{tr('Select a user group or add a new one')}</h3>
+                <p>{tr('Rights given to a group apply to every member of that group.')}</p>
+                <button className="btn-primary" onClick={() => openGroup('new')}>{tr('＋ New user group')}</button></div>
             ) : (<>
               <div className="fx-head"><div className="fx-namebox">
-                <input value={gname} maxLength={50} placeholder="Group name…" aria-label="Group name" onChange={e => setGname(e.target.value)} onKeyDown={e => e.key === 'Enter' && gname.trim() && void saveGroup()} autoFocus={gid === 'new'} />
-                {typeof gid === 'number' && gdetail.data && <div className="fx-count"><b>{gdetail.data.users.length}</b><span>member{gdetail.data.users.length === 1 ? '' : 's'}</span></div>}
+                <input value={gname} maxLength={50} placeholder={tr('Group name…')} aria-label={tr('Group name')} onChange={e => setGname(e.target.value)} onKeyDown={e => e.key === 'Enter' && gname.trim() && void saveGroup()} autoFocus={gid === 'new'} />
+                {typeof gid === 'number' && gdetail.data && <div className="fx-count"><b>{gdetail.data.users.length}</b><span>{tr('member')}{gdetail.data.users.length === 1 ? '' : 's'}</span></div>}
               </div></div>
               <div className="fx-pane">
                 {typeof gid === 'number' && gdetail.data ? (
                   <div className="fx-two">
-                    <Panel title="Group rights" icon="🛡" items={gdetail.data.rights} busy={busy} empty="No rights yet." onAdd={() => setGdlg('right')}
-                      onRemove={id => { const r = gdetail.data!.rights.find(x => x.id === id); if (r) askRemove('Remove right?', <>The right <b>{r.name}</b> will be removed from the group <b>{gname}</b>.</>, async () => { await api.delGroupRight(gid, r.id); await refresh(); setMsg({ ok: true, t: `Right "${r.name}" removed from the group.` }); }); }} />
-                    <Panel title="Group users" icon="👤" avatar items={gdetail.data.users} busy={busy} empty="No users in this group." onAdd={() => setGdlg('user')}
-                      onRemove={id => { const u = gdetail.data!.users.find(x => x.id === id); if (u) askRemove('Remove user from group?', <><b>{u.name}</b> will be removed from the group <b>{gname}</b>.</>, async () => { await api.delGroupUser(gid, u.id); await refresh(); setMsg({ ok: true, t: `${u.name} removed from the group.` }); }); }} />
+                    <Panel title={tr('Group rights')} icon="🛡" items={gdetail.data.rights} busy={busy} empty={tr('No rights yet.')} onAdd={() => setGdlg('right')}
+                      onRemove={id => { const r = gdetail.data!.rights.find(x => x.id === id); if (r) askRemove(tr('Remove right?'), <>{tr('The right')}{' '}<b>{r.name}</b> {tr('will be removed from the group')}{' '}<b>{gname}</b>.</>, async () => { await api.delGroupRight(gid, r.id); await refresh(); setMsg({ ok: true, t: tr('Right "{0}" removed from the group.', r.name) }); }); }} />
+                    <Panel title={tr('Group users')} icon="👤" avatar items={gdetail.data.users} busy={busy} empty={tr('No users in this group.')} onAdd={() => setGdlg('user')}
+                      onRemove={id => { const u = gdetail.data!.users.find(x => x.id === id); if (u) askRemove(tr('Remove user from group?'), <><b>{u.name}</b> {tr('will be removed from the group')}{' '}<b>{gname}</b>.</>, async () => { await api.delGroupUser(gid, u.id); await refresh(); setMsg({ ok: true, t: tr('{0} removed from the group.', u.name) }); }); }} />
                   </div>
-                ) : gid === 'new' ? <div className="fx-hint">Save the group first, then add rights and users.</div> : <PageLoader compact label="Loading group" />}
+                ) : gid === 'new' ? <div className="fx-hint">{tr('Save the group first, then add rights and users.')}</div> : <PageLoader compact label={tr('Loading group')} />}
               </div>
               <SaveBar dirty={gdirty} busy={busy} canSave={!!gname.trim()} onSave={() => void saveGroup()} onReset={() => setGname(gbase)}>
-                {typeof gid === 'number' && <button className="btn-ghost danger" disabled={busy} onClick={() => setGdlg('del')}>Delete</button>}
-                <button className="btn-ghost" onClick={() => nav('/documents')}>Close</button>
+                {typeof gid === 'number' && <button className="btn-ghost danger" disabled={busy} onClick={() => setGdlg('del')}>{tr('Delete')}</button>}
+                <button className="btn-ghost" onClick={() => nav('/documents')}>{tr('Close')}</button>
               </SaveBar>
             </>)}
           </section>
@@ -339,35 +340,35 @@ export default function UserManagement() {
       <Toast msg={msg} onClose={() => setMsg(null)} />
 
       {/* ---- dialogs ---- */}
-      {pendingU !== undefined && <ConfirmDialog title="Discard your changes?" confirmLabel="Discard" busy={false}
-        message={<>You changed <b>{f.name || 'this user'}</b> and did not save it.</>} onConfirm={() => { setTouched(false); setUid(pendingU); setPendingU(undefined); }} onCancel={() => setPendingU(undefined)} />}
-      {pendingG !== undefined && <ConfirmDialog title="Discard your changes?" confirmLabel="Discard" busy={false}
-        message={<>You changed the group name and did not save it.</>} onConfirm={() => { setGid(pendingG); setPendingG(undefined); }} onCancel={() => setPendingG(undefined)} />}
-      {rm && <ConfirmDialog danger title={rm.title} confirmLabel="Remove" busy={busy} message={rm.text}
+      {pendingU !== undefined && <ConfirmDialog title={tr('Discard your changes?')} confirmLabel={tr('Discard')} busy={false}
+        message={<>{tr('You changed')}{' '}<b>{f.name || 'this user'}</b> {tr('and did not save it.')}</>} onConfirm={() => { setTouched(false); setUid(pendingU); setPendingU(undefined); }} onCancel={() => setPendingU(undefined)} />}
+      {pendingG !== undefined && <ConfirmDialog title={tr('Discard your changes?')} confirmLabel={tr('Discard')} busy={false}
+        message={<>{tr('You changed the group name and did not save it.')}</>} onConfirm={() => { setGid(pendingG); setPendingG(undefined); }} onCancel={() => setPendingG(undefined)} />}
+      {rm && <ConfirmDialog danger title={rm.title} confirmLabel={tr('Remove')} busy={busy} message={rm.text}
         onConfirm={async () => { await run(rm.fn); setRm(null); }} onCancel={() => setRm(null)} />}
-      {dlg === 'right' && typeof uid === 'number' && <RightPicker lang={lang} legend="User Rights" taken={(cur?.rights ?? []).filter(r => r.rcod !== 21).map(r => r.rcod)} busy={busy} onCancel={() => setDlg(null)}
-        onOk={(c, v) => run(async () => { await api.addUserRight(uid, c, v); await refresh(); setDlg(null); setMsg({ ok: true, t: 'Right added.' }); })} />}
-      {dlg === 'group' && typeof uid === 'number' && <Pick title="Choose Groups" legend="User Groups" busy={busy} onCancel={() => setDlg(null)}
+      {dlg === 'right' && typeof uid === 'number' && <RightPicker lang={lang} legend={tr('User Rights')} taken={(cur?.rights ?? []).filter(r => r.rcod !== 21).map(r => r.rcod)} busy={busy} onCancel={() => setDlg(null)}
+        onOk={(c, v) => run(async () => { await api.addUserRight(uid, c, v); await refresh(); setDlg(null); setMsg({ ok: true, t: tr('Right added.') }); })} />}
+      {dlg === 'group' && typeof uid === 'number' && <Pick title={tr('Choose Groups')} legend={tr('User Groups')} busy={busy} onCancel={() => setDlg(null)}
         items={pickerGroups.filter(g => !cur?.groups.some(x => x.id === g.id))}
-        onOk={id => run(async () => { await api.addUserToGroup(uid, id); await refresh(); setDlg(null); setMsg({ ok: true, t: 'User added to the group.' }); })} />}
-      {dlg === 'copy' && typeof uid === 'number' && <Pick title="Copy From" legend="Copy the rights and user groups of this user" busy={busy} onCancel={() => setDlg(null)}
+        onOk={id => run(async () => { await api.addUserToGroup(uid, id); await refresh(); setDlg(null); setMsg({ ok: true, t: tr('User added to the group.') }); })} />}
+      {dlg === 'copy' && typeof uid === 'number' && <Pick title={tr('Copy From')} legend={tr('Copy the rights and user groups of this user')} busy={busy} onCancel={() => setDlg(null)}
         items={pickerUsers.filter(u => u.id !== uid)}
-        onOk={id => run(async () => { const r = await api.copyUserFrom(uid, id); await refresh(); setDlg(null); setMsg({ ok: true, t: `Copied ${r.rightsAdded} right(s) and ${r.groupsAdded} group membership(s).` }); })} />}
+        onOk={id => run(async () => { const r = await api.copyUserFrom(uid, id); await refresh(); setDlg(null); setMsg({ ok: true, t: tr('Copied {0} right(s) and {1} group membership(s).', r.rightsAdded, r.groupsAdded) }); })} />}
       {dlg === 'all' && typeof uid === 'number' && <AllRightsDialog id={uid} lang={lang} name={f.name} onClose={() => setDlg(null)} />}
       {dlg === 'pwd' && typeof uid === 'number' && <PasswordDialog busy={busy} error={pwdErr} onCancel={() => setDlg(null)}
-        onOk={async p => { setBusy(true); setPwdErr(null); try { await api.setUserPassword(uid, p); setDlg(null); setMsg({ ok: true, t: 'Password changed.' }); } catch (e) { setPwdErr((e as Error).message); } finally { setBusy(false); } }} />}
-      {dlg === 'del' && typeof uid === 'number' && <ConfirmDialog danger title="Delete user?" confirmLabel="Delete" busy={busy}
-        message={<>The user <b>{f.name}</b> will be deactivated and removed from all user groups; all rights are removed. Documents and history keep the name.</>}
-        onConfirm={async () => { await run(async () => { await api.deleteUser(uid); await refresh(); setUid(null); setMsg({ ok: true, t: 'User deleted.' }); }); setDlg(null); }} onCancel={() => setDlg(null)} />}
+        onOk={async p => { setBusy(true); setPwdErr(null); try { await api.setUserPassword(uid, p); setDlg(null); setMsg({ ok: true, t: tr('Password changed.') }); } catch (e) { setPwdErr((e as Error).message); } finally { setBusy(false); } }} />}
+      {dlg === 'del' && typeof uid === 'number' && <ConfirmDialog danger title={tr('Delete user?')} confirmLabel={tr('Delete')} busy={busy}
+        message={<>{tr('The user')}{' '}<b>{f.name}</b> {tr('will be deactivated and removed from all user groups; all rights are removed. Documents and history keep the name.')}</>}
+        onConfirm={async () => { await run(async () => { await api.deleteUser(uid); await refresh(); setUid(null); setMsg({ ok: true, t: tr('User deleted.') }); }); setDlg(null); }} onCancel={() => setDlg(null)} />}
 
-      {gdlg === 'right' && typeof gid === 'number' && <RightPicker lang={lang} legend="Group Rights" taken={(gdetail.data?.rights ?? []).filter(r => r.rcod !== 21).map(r => r.rcod)} busy={busy} onCancel={() => setGdlg(null)}
-        onOk={(c, v) => run(async () => { await api.addGroupRight(gid, c, v); await refresh(); setGdlg(null); setMsg({ ok: true, t: 'Right added to the group.' }); })} />}
-      {gdlg === 'user' && typeof gid === 'number' && <Pick title="Choose Users" legend="Group Users" busy={busy} onCancel={() => setGdlg(null)}
+      {gdlg === 'right' && typeof gid === 'number' && <RightPicker lang={lang} legend={tr('Group Rights')} taken={(gdetail.data?.rights ?? []).filter(r => r.rcod !== 21).map(r => r.rcod)} busy={busy} onCancel={() => setGdlg(null)}
+        onOk={(c, v) => run(async () => { await api.addGroupRight(gid, c, v); await refresh(); setGdlg(null); setMsg({ ok: true, t: tr('Right added to the group.') }); })} />}
+      {gdlg === 'user' && typeof gid === 'number' && <Pick title={tr('Choose Users')} legend={tr('Group Users')} busy={busy} onCancel={() => setGdlg(null)}
         items={pickerUsers.filter(u => !gdetail.data?.users.some(x => x.id === u.id))}
-        onOk={id => run(async () => { await api.addGroupUser(gid, id); await refresh(); setGdlg(null); setMsg({ ok: true, t: 'User added to the group.' }); })} />}
-      {gdlg === 'del' && typeof gid === 'number' && <ConfirmDialog danger title="Delete user group?" confirmLabel="Delete" busy={busy}
-        message={<>The user group <b>{gname}</b> will be removed together with its rights. Its members lose the rights they got through this group.</>}
-        onConfirm={async () => { await run(async () => { await api.deleteUserGroup(gid); await refresh(); setGid(null); setMsg({ ok: true, t: 'User group deleted.' }); }); setGdlg(null); }} onCancel={() => setGdlg(null)} />}
+        onOk={id => run(async () => { await api.addGroupUser(gid, id); await refresh(); setGdlg(null); setMsg({ ok: true, t: tr('User added to the group.') }); })} />}
+      {gdlg === 'del' && typeof gid === 'number' && <ConfirmDialog danger title={tr('Delete user group?')} confirmLabel={tr('Delete')} busy={busy}
+        message={<>{tr('The user group')}{' '}<b>{gname}</b> {tr('will be removed together with its rights. Its members lose the rights they got through this group.')}</>}
+        onConfirm={async () => { await run(async () => { await api.deleteUserGroup(gid); await refresh(); setGid(null); setMsg({ ok: true, t: tr('User group deleted.') }); }); setGdlg(null); }} onCancel={() => setGdlg(null)} />}
     </div>
   );
 }
@@ -377,17 +378,17 @@ function AllRightsDialog({ id, lang, name, onClose }: { id: number; lang: string
   const q = useQuery({ queryKey: ['um-user-all', id, lang], queryFn: () => api.userAllRights(id, lang) });
   return (
     <div className="modal-back" style={{ zIndex: 90 }} onMouseDown={onClose}>
-      <div className="modal um-pick" role="dialog" aria-modal="true" aria-label="All rights" onMouseDown={e => e.stopPropagation()}>
-        <div className="modal-head"><b>All rights of {name}</b></div>
+      <div className="modal um-pick" role="dialog" aria-modal="true" aria-label={tr('All rights')} onMouseDown={e => e.stopPropagation()}>
+        <div className="modal-head"><b>{tr('All rights of')}{' '}{name}</b></div>
         <div className="um-pick-body">
-          <div className="um-legend">Own rights plus the rights of all user groups</div>
+          <div className="um-legend">{tr('Own rights plus the rights of all user groups')}</div>
           <div className="um-list">
-            {q.isLoading && <PageLoader compact label="Loading rights" />}
+            {q.isLoading && <PageLoader compact label={tr('Loading rights')} />}
             {q.data?.rights.map(r => <div key={`${r.id}-${r.rcod}-${r.rvalue}`} className="um-item">{r.name}</div>)}
-            {q.data?.rights.length === 0 && <div className="mh" style={{ padding: 8 }}>No rights.</div>}
+            {q.data?.rights.length === 0 && <div className="mh" style={{ padding: 8 }}>{tr('No rights.')}</div>}
           </div>
         </div>
-        <div className="modal-foot"><button className="btn-primary" onClick={onClose}>OK</button></div>
+        <div className="modal-foot"><button className="btn-primary" onClick={onClose}>{tr('OK')}</button></div>
       </div>
     </div>
   );

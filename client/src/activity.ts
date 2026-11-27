@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react';
+import { tr } from './i18n';
 
 /** What the signed-in user did with documents in this login session (view, download, edit, verify ...). Kept in sessionStorage. */
 export type DocAction = 'view' | 'download' | 'edit' | 'verify' | 'release' | 'publish';
@@ -36,7 +37,7 @@ export function track(action: DocAction, d: DocLike, lang: string) {
   const i = list.findIndex(e => e.idDoc === d.idDoc && e.lang === l);
   const old = i >= 0 ? list[i]! : undefined;
   const entry: ActEntry = {
-    idDoc: d.idDoc, lang: l, name: d.docName ?? d.name ?? old?.name ?? `Document ${d.idDoc}`,
+    idDoc: d.idDoc, lang: l, name: d.docName ?? d.name ?? old?.name ?? tr('Document {0}', d.idDoc),
     ext: (d.extension ?? old?.ext ?? '').replace(/^\./, '').toLowerCase(),
     status: d.status ?? old?.status ?? 0, statusName: d.statusName ?? old?.statusName ?? '', folder: old?.folder,
     events: [...(old?.events ?? []), { a: action, at: now }].slice(-30), last: now,

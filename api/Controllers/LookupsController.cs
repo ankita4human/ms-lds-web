@@ -33,22 +33,24 @@ public class LookupsController(IConfiguration cfg, IMemoryCache cache) : Control
         if (string.IsNullOrWhiteSpace(lang)) return BadRequest(new { error = "lang is required" });
         var acc = int.Parse(User.FindFirstValue("idAcc")!);
         // The dashboard runs ~12 heavy queries; keep the result per user+language for 2 minutes.
-        var cacheKey = $"stats:{acc}:{lang}";
+        var ui = Ui.Lang(Request); var cacheKey = $"stats:{acc}:{lang}:{ui}";
         if (cache.TryGetValue(cacheKey, out object? cached) && cached is not null) return Ok(cached);
         await using var con = new SqlConnection(cfg.GetConnectionString("Lds"));
         var Vis = await Access.VisibleSql(con, acc, lang);
-        var p = new { acc, lang };
+        var p = new { acc, lang, ui, frozen = Ui.Frozen(ui) };
         var w = $"WHERE ISNULL(d.LAIgnore, 0) = 0 AND d.Lang = @lang AND {Vis}";
 
         async Task<List<StatRow>> Series(string sql) =>
             (await con.QueryAsync<StatRow>($"{Cte} {sql} OPTION (MAXRECURSION 100)", p)).ToList();
 
-        var byStatus = await Series($@"SELECT ISNULL(s.StatusDesc, CASE d.[Status] WHEN 11 THEN 'Frozen' ELSE CONCAT('Status ', d.[Status]) END) AS Label, COUNT(*) AS [Count]
-            FROM Documents d OUTER APPLY (SELECT TOP 1 StatusDesc FROM [Status] WHERE IDStatus = d.[Status] AND Lang = d.Lang) s {w}
-            GROUP BY ISNULL(s.StatusDesc, CASE d.[Status] WHEN 11 THEN 'Frozen' ELSE CONCAT('Status ', d.[Status]) END) ORDER BY [Count] DESC");
-        var byType = await Series($@"SELECT REPLACE(ISNULL(t.TypeDesc, CONCAT('Type ', d.[Type])), '<DE>', '') AS Label, COUNT(*) AS [Count]
-            FROM Documents d OUTER APPLY (SELECT TOP 1 TypeDesc FROM DocTypes WHERE IDType = d.[Type] AND Lang = d.Lang) t {w}
-            GROUP BY REPLACE(ISNULL(t.TypeDesc, CONCAT('Type ', d.[Type])), '<DE>', '') ORDER BY [Count] DESC");
+        var byStatus = await Series($@"SELECT ISNULL(su.StatusDesc, ISNULL(s.StatusDesc, CASE d.[Status] WHEN 11 THEN @frozen ELSE CONCAT('Status ', d.[Status]) END)) AS Label, COUNT(*) AS [Count]
+            FROM Documents d OUTER APPLY (SELECT TOP 1 StatusDesc FROM [Status] WHERE IDStatus = d.[Status] AND Lang = d.Lang) s
+            OUTER APPLY (SELECT TOP 1 StatusDesc FROM [Status] WHERE IDStatus = d.[Status] AND Lang = @ui) su {w}
+            GROUP BY ISNULL(su.StatusDesc, ISNULL(s.StatusDesc, CASE d.[Status] WHEN 11 THEN @frozen ELSE CONCAT('Status ', d.[Status]) END)) ORDER BY [Count] DESC");
+        var byType = await Series($@"SELECT REPLACE(COALESCE(CASE WHEN LEFT(tu.TypeDesc, 1) <> '<' THEN tu.TypeDesc END, t.TypeDesc, CONCAT('Type ', d.[Type])), '<DE>', '') AS Label, COUNT(*) AS [Count]
+            FROM Documents d OUTER APPLY (SELECT TOP 1 TypeDesc FROM DocTypes WHERE IDType = d.[Type] AND Lang = d.Lang) t
+            OUTER APPLY (SELECT TOP 1 TypeDesc FROM DocTypes WHERE IDType = d.[Type] AND Lang = @ui) tu {w}
+            GROUP BY REPLACE(COALESCE(CASE WHEN LEFT(tu.TypeDesc, 1) <> '<' THEN tu.TypeDesc END, t.TypeDesc, CONCAT('Type ', d.[Type])), '<DE>', '') ORDER BY [Count] DESC");
         var byAuthor = await Series($@"SELECT TOP 10 a.AccShort AS Label, COUNT(*) AS [Count]
             FROM Documents d JOIN Accounts a ON a.IdAcc = d.IdCre {w} GROUP BY a.AccShort ORDER BY [Count] DESC");
         var byPublisher = await Series($@"SELECT TOP 10 a.AccShort AS Label, COUNT(*) AS [Count]

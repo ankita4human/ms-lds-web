@@ -6,6 +6,7 @@ import { useLang } from './LangContext';
 import { TrackColumns, YearLines, PALETTE } from './components/charts';
 import { fmtDate } from './components/bits';
 import { PageLoader } from './components/Loader';
+import { tr } from './i18n';
 
 const dots = <span className="dots">•••</span>;
 
@@ -53,37 +54,37 @@ export default function Dashboard() {
   const pct = (n?: number) => (total ? Math.round(((n ?? 0) / total) * 1000) / 10 : 0);
   const created = (s?.createdByYear ?? []); const published = (s?.publishedByYear ?? []);
   const cDelta = yoy(created); const pDelta = yoy(published);
-  const arrow = (d?: number) => (d === undefined ? 'per year' : <>{d >= 0 ? '▲' : '▼'} {Math.abs(d)}% vs prev. year</>);
+  const arrow = (d?: number) => (d === undefined ? 'per year' : <>{d >= 0 ? '▲' : '▼'} {Math.abs(d)}{tr('% vs prev. year')}</>);
   const status = s?.byStatus ?? [];
   const topAuthor = Math.max(1, ...(s?.byAuthor ?? []).map(a => a.count));
 
-  if (q.isLoading || !lang) return <PageLoader label="Loading dashboard" />;
+  if (q.isLoading || !lang) return <PageLoader label={tr('Loading dashboard')} />;
 
   return (
     <section>
-      {q.isError && <div className="card error" role="alert" style={{ marginBottom: 16 }}>Could not load statistics.</div>}
+      {q.isError && <div className="card error" role="alert" style={{ marginBottom: 16 }}>{tr('Could not load statistics.')}</div>}
       <div className="grid kpis">
-        <Kpi title={`Documents (${lang})`} value={k?.total} color="#2f6df6" spark={created.slice(-8).map(x => x.count)} delta={arrow(cDelta)} />
-        <Kpi title="Published" value={k?.published} color="#22c55e" spark={published.slice(-8).map(x => x.count)} delta={arrow(pDelta)} />
-        <Kpi title="Draft / in edit" value={(k?.draft ?? 0) + (k?.edit ?? 0)} color="#f97316" pct={pct((k?.draft ?? 0) + (k?.edit ?? 0))} delta={`${pct((k?.draft ?? 0) + (k?.edit ?? 0))}% of all`} />
-        <Kpi title="Verified / released" value={(k?.verified ?? 0) + (k?.released ?? 0)} color="#7c3aed" pct={pct((k?.verified ?? 0) + (k?.released ?? 0))} delta={`${pct((k?.verified ?? 0) + (k?.released ?? 0))}% of all`} />
-        <Kpi title="Expired" value={k?.expired} color="#ef4444" pct={pct(k?.expired)} delta={`${k?.expiringSoon ?? 0} more expire within 30 days`} />
+        <Kpi title={tr('Documents ({0})', lang)} value={k?.total} color="#2f6df6" spark={created.slice(-8).map(x => x.count)} delta={arrow(cDelta)} />
+        <Kpi title={tr('Published')} value={k?.published} color="#22c55e" spark={published.slice(-8).map(x => x.count)} delta={arrow(pDelta)} />
+        <Kpi title={tr('Draft / in edit')} value={(k?.draft ?? 0) + (k?.edit ?? 0)} color="#f97316" pct={pct((k?.draft ?? 0) + (k?.edit ?? 0))} delta={`${pct((k?.draft ?? 0) + (k?.edit ?? 0))}% of all`} />
+        <Kpi title={tr('Verified / released')} value={(k?.verified ?? 0) + (k?.released ?? 0)} color="#7c3aed" pct={pct((k?.verified ?? 0) + (k?.released ?? 0))} delta={`${pct((k?.verified ?? 0) + (k?.released ?? 0))}% of all`} />
+        <Kpi title={tr('Expired')} value={k?.expired} color="#ef4444" pct={pct(k?.expired)} delta={`${k?.expiringSoon ?? 0} more expire within 30 days`} />
       </div>
 
       <div className="grid row-2-1">
         <div className="card">
-          <div className="card-head"><div><h3>Document growth</h3><div className="hint">Created vs published per year</div></div>{dots}</div>
-          <div className="chart tall"><YearLines a={created} b={published} aName="Created" bName="Published" /></div>
+          <div className="card-head"><div><h3>{tr('Document growth')}</h3><div className="hint">{tr('Created vs published per year')}</div></div>{dots}</div>
+          <div className="chart tall"><YearLines a={created} b={published} aName={tr('Created')} bName={tr('Published')} /></div>
         </div>
         <div className="card">
-          <div className="card-head"><div><h3>Document types</h3><div className="hint">Top 10 types in this language</div></div>{dots}</div>
+          <div className="card-head"><div><h3>{tr('Document types')}</h3><div className="hint">{tr('Top 10 types in this language')}</div></div>{dots}</div>
           <div className="chart tall"><TrackColumns data={(s?.byType ?? []).slice(0, 10)} /></div>
         </div>
       </div>
 
       <div className="grid row-3" style={{ marginTop: 18 }}>
         <div className="card">
-          <div className="card-head"><div><h3>Author activity</h3><div className="hint">Documents created, top 5</div></div>{dots}</div>
+          <div className="card-head"><div><h3>{tr('Author activity')}</h3><div className="hint">{tr('Documents created, top 5')}</div></div>{dots}</div>
           <div className="ulist">
             {(s?.byAuthor ?? []).slice(0, 5).map((a, i) => (
               <div className="urow" key={a.label}>
@@ -93,12 +94,12 @@ export default function Dashboard() {
                 <span className="pc" style={{ color: PALETTE[i % PALETTE.length] }}>{a.count}</span>
               </div>
             ))}
-            {!s?.byAuthor?.length && <div className="empty" style={{ height: 120 }}>No data</div>}
+            {!s?.byAuthor?.length && <div className="empty" style={{ height: 120 }}>{tr('No data')}</div>}
           </div>
         </div>
 
         <div className="card">
-          <div className="card-head"><div><h3>Status channels</h3><div className="hint">Documents by lifecycle status</div></div>{dots}</div>
+          <div className="card-head"><div><h3>{tr('Status channels')}</h3><div className="hint">{tr('Documents by lifecycle status')}</div></div>{dots}</div>
           <div className="donut-wrap">
             <div className="donut-box">
               <ResponsiveContainer>
@@ -109,7 +110,7 @@ export default function Dashboard() {
                   <Tooltip />
                 </PieChart>
               </ResponsiveContainer>
-              <div className="donut-center"><b>{total}</b><small>Documents</small></div>
+              <div className="donut-center"><b>{total}</b><small>{tr('Documents')}</small></div>
             </div>
             <div className="legend">
               {status.slice(0, 6).map((x, i) => (
@@ -120,9 +121,9 @@ export default function Dashboard() {
         </div>
 
         <div className="card">
-          <div className="card-head"><div><h3>Expiring soon</h3><div className="hint">Next documents to expire</div></div>{dots}</div>
+          <div className="card-head"><div><h3>{tr('Expiring soon')}</h3><div className="hint">{tr('Next documents to expire')}</div></div>{dots}</div>
           <table className="mini-table">
-            <thead><tr><th>Document</th><th>Expires</th><th>In</th></tr></thead>
+            <thead><tr><th>{tr('Document')}</th><th>{tr('Expires')}</th><th>{tr('In')}</th></tr></thead>
             <tbody>
               {(s?.expiringDocs ?? []).map(d => {
                 const days = d.dateExp ? Math.ceil((new Date(d.dateExp).getTime() - Date.now()) / 86400000) : 0;
@@ -130,11 +131,11 @@ export default function Dashboard() {
                 return (
                   <tr key={d.idDoc}>
                     <td className="nm" title={d.docName}>{d.docName}</td><td>{fmtDate(d.dateExp)}</td>
-                    <td><span className="pill" style={{ background: hot ? '#fde8e8' : '#e3f8ea', color: hot ? '#b42318' : '#15803d' }}>{days} d</span></td>
+                    <td><span className="pill" style={{ background: hot ? '#fde8e8' : '#e3f8ea', color: hot ? '#b42318' : '#15803d' }}>{days} {tr('d')}</span></td>
                   </tr>
                 );
               })}
-              {s && !s.expiringDocs?.length && <tr><td colSpan={3} style={{ color: 'var(--muted)' }}>Nothing is about to expire.</td></tr>}
+              {s && !s.expiringDocs?.length && <tr><td colSpan={3} style={{ color: 'var(--muted)' }}>{tr('Nothing is about to expire.')}</td></tr>}
             </tbody>
           </table>
         </div>

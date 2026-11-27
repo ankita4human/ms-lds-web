@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { Spinner } from './Loader';
+import { tr } from '../i18n';
 
 /** Modern confirmation dialog used instead of the browser's confirm() everywhere. */
 export default function ConfirmDialog({ title, message, confirmLabel = 'Confirm', danger = false, busy = false, onConfirm, onCancel }: {
@@ -19,8 +20,8 @@ export default function ConfirmDialog({ title, message, confirmLabel = 'Confirm'
         <h3>{title}</h3>
         <div className="confirm-msg">{message}</div>
         <div className="modal-foot" style={{ justifyContent: 'center' }}>
-          <button className="btn-ghost" onClick={onCancel} disabled={busy}>Cancel</button>
-          <button ref={ok} className={`btn-primary ${danger ? 'btn-danger' : ''}`} onClick={onConfirm} disabled={busy}>{busy ? <><Spinner />Please wait</> : confirmLabel}</button>
+          <button className="btn-ghost" onClick={onCancel} disabled={busy}>{tr('Cancel')}</button>
+          <button ref={ok} className={`btn-primary ${danger ? 'btn-danger' : ''}`} onClick={onConfirm} disabled={busy}>{busy ? <><Spinner />{tr('Please wait')}</> : confirmLabel}</button>
         </div>
       </div>
     </div>

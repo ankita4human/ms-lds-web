@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { api, downloadDocFile, previewDocFile } from '../api';
 import { ACTION_LABEL, clearActivity, setFolder, track, useActivity, type ActEntry, type DocAction } from '../activity';
 import { StatusBadge, ExtBadge } from './bits';
+import { tr } from '../i18n';
 
 const hhmm = (t: number) => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 function ago(t: number) {
@@ -63,22 +64,22 @@ export default function ActivityTray() {
   return (
     <>
       <button className={`act-fab ${solo ? 'solo' : ''} ${open ? 'open' : ''}`} onClick={() => { setOpen(o => !o); setAsk(null); setErr(''); }}
-        aria-label="My document activity" title="Documents I viewed, downloaded, edited or verified in this session">
-        <span aria-hidden>🕘</span><span className="act-fab-text">Activity Pulse</span>
+        aria-label={tr('My document activity')} title={tr('Documents I viewed, downloaded, edited or verified in this session')}>
+        <span aria-hidden>🕘</span><span className="act-fab-text">{tr('Activity Pulse')}</span>
         {items.length > 0 && <i className="act-count">{items.length > 99 ? '99+' : items.length}</i>}
       </button>
       {open && (
-        <div className={`act-panel ${solo ? 'solo' : ''}`} role="dialog" aria-label="My document activity">
+        <div className={`act-panel ${solo ? 'solo' : ''}`} role="dialog" aria-label={tr('My document activity')}>
           <div className="act-head">
-            <div><b>Activity Pulse</b><small>This login session · {items.length} document{items.length === 1 ? '' : 's'}</small></div>
-            <button className="act-clear" onClick={() => { clearActivity(); setAsk(null); }} disabled={items.length === 0}>Clear</button>
-            <button className="act-x" onClick={() => setOpen(false)} aria-label="Close">✕</button>
+            <div><b>{tr('Activity Pulse')}</b><small>{tr('This login session ·')}{' '}{items.length} {tr('document')}{items.length === 1 ? '' : 's'}</small></div>
+            <button className="act-clear" onClick={() => { clearActivity(); setAsk(null); }} disabled={items.length === 0}>{tr('Clear')}</button>
+            <button className="act-x" onClick={() => setOpen(false)} aria-label={tr('Close')}>✕</button>
           </div>
           {items.length > 0 && (
             <div className="act-sum">{(Object.keys(ACTION_LABEL) as DocAction[]).filter(a => counts[a]).map(a =>
               <span key={a} title={ACTION_LABEL[a].past}>{ACTION_LABEL[a].icon} {counts[a]}</span>)}</div>)}
           <div className="act-list">
-            {items.length === 0 && <div className="act-empty"><span>🗂️</span><b>Nothing yet</b><small>Documents you view, download, edit or verify appear here, so you can jump back to them.</small></div>}
+            {items.length === 0 && <div className="act-empty"><span>🗂️</span><b>{tr('Nothing yet')}</b><small>{tr('Documents you view, download, edit or verify appear here, so you can jump back to them.')}</small></div>}
             {items.map(e => {
               const key = `${e.idDoc}:${e.lang}`; const isAsk = ask?.idDoc === e.idDoc && ask.lang === e.lang;
               const agg = (Object.keys(ACTION_LABEL) as DocAction[]).map(a => ({ a, n: e.events.filter(v => v.a === a).length, at: [...e.events].reverse().find(v => v.a === a)?.at ?? 0 })).filter(x => x.n > 0).sort((x, y) => y.at - x.at);
@@ -92,19 +93,19 @@ export default function ActivityTray() {
                       <small className="act-folder" title={e.folder}>📁 {e.folder ? e.folder.split(' / ').map((p, i, a) => <span key={i}>{p}{i < a.length - 1 && <em> › </em>}</span>) : <i>#{e.idDoc} · {e.lang}</i>}</small>
                       <span className="act-chips">
                         {e.statusName && <StatusBadge id={e.status} name={e.statusName} />}
-                        {agg.map(x => <span key={x.a} className={`act-chip a-${x.a}`} title={`${ACTION_LABEL[x.a].past} ${x.n}×, last at ${hhmm(x.at)}`}>{ACTION_LABEL[x.a].icon} {ACTION_LABEL[x.a].past} {hhmm(x.at)}{x.n > 1 ? ` ×${x.n}` : ''}</span>)}
+                        {agg.map(x => <span key={x.a} className={`act-chip a-${x.a}`} title={tr('{0} {1}×, last at {2}', ACTION_LABEL[x.a].past, x.n, hhmm(x.at))}>{ACTION_LABEL[x.a].icon} {ACTION_LABEL[x.a].past} {hhmm(x.at)}{x.n > 1 ? ` ×${x.n}` : ''}</span>)}
                       </span>
                     </span>
                     <span className="act-time">{ago(e.last)}</span>
                   </button>
                   {isAsk && (
                     <div className="act-ask">
-                      <p>{dl ? <>You downloaded this at <b>{hhmm(dl.at)}</b>.</> : ed ? <>You edited this at <b>{hhmm(ed.at)}</b>.</> : <>You viewed this at <b>{hhmm(vw!.at)}</b>.</>} What do you want to do now?</p>
+                      <p>{dl ? <>{tr('You downloaded this at')}{' '}<b>{hhmm(dl.at)}</b>.</> : ed ? <>{tr('You edited this at')}{' '}<b>{hhmm(ed.at)}</b>.</> : <>{tr('You viewed this at')}{' '}<b>{hhmm(vw!.at)}</b>.</>} {tr('What do you want to do now?')}</p>
                       <div className="act-btns">
-                        <button onClick={() => void again(e, 'download')}>⬇️ Download again</button>
-                        <button onClick={() => void again(e, 'edit')}>✏️ Edit again</button>
-                        <button onClick={() => void again(e, 'view')}>👁 View again</button>
-                        <button className="pri" onClick={() => land(e)}>📂 Just show it in the folder</button>
+                        <button onClick={() => void again(e, 'download')}>{tr('⬇️ Download again')}</button>
+                        <button onClick={() => void again(e, 'edit')}>{tr('✏️ Edit again')}</button>
+                        <button onClick={() => void again(e, 'view')}>{tr('👁 View again')}</button>
+                        <button className="pri" onClick={() => land(e)}>{tr('📂 Just show it in the folder')}</button>
                       </div>
                     </div>)}
                 </div>);

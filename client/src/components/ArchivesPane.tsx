@@ -4,6 +4,7 @@ import { archivesApi, showArchive, type ArchiveItem } from '../api';
 import { StatusBadge } from './bits';
 import './archives.css';
 import Toast, { type ToastMsg } from './Toast';
+import { tr } from '../i18n';
 
 const ver = (a: { v1: number; v2: number; v3: number }) => `${a.v1}.${a.v2}.${a.v3}`;
 const stamp = (s?: string) => {
@@ -28,16 +29,16 @@ function ListDialog({ docId, lang, dlg, onClose }: { docId: number; lang: string
     <div className="modal-back" onMouseDown={onClose}>
       <div className="modal grp-dlg" style={{ width: 720, maxWidth: '94vw' }} role="dialog" aria-modal="true" onMouseDown={e => e.stopPropagation()}>
         <div className="modal-head"><div>
-          <h3 style={{ margin: 0 }}>{dlg.kind === 'history' ? 'History' : 'Property Changes'} · version {ver(dlg.a)}</h3>
-          <div className="mh" style={{ marginTop: 2 }}>{dlg.kind === 'history' ? 'Modification comments of this version' : 'Name / type / author / process owner / version changes made while this version was current'}</div>
-        </div><button className="x" onClick={onClose} aria-label="Close">✕</button></div>
+          <h3 style={{ margin: 0 }}>{dlg.kind === 'history' ? tr('History') : tr('Property Changes')} {tr('· version')}{' '}{ver(dlg.a)}</h3>
+          <div className="mh" style={{ marginTop: 2 }}>{dlg.kind === 'history' ? tr('Modification comments of this version') : tr('Name / type / author / process owner / version changes made while this version was current')}</div>
+        </div><button className="x" onClick={onClose} aria-label={tr('Close')}>✕</button></div>
         <div style={{ padding: '4px 20px 12px', maxHeight: '55vh', overflow: 'auto' }}>
           {q.isError && <div className="error" role="alert">{(q.error as Error).message}</div>}
-          {q.isLoading && <div className="empty" style={{ height: 70 }}>Loading…</div>}
-          {q.data && items.length === 0 && <div className="empty" style={{ height: 80 }}>{dlg.kind === 'history' ? 'No modification comment is stored for this version.' : 'No property change is stored for this version.'}</div>}
+          {q.isLoading && <div className="empty" style={{ height: 70 }}>{tr('Loading…')}</div>}
+          {q.data && items.length === 0 && <div className="empty" style={{ height: 80 }}>{dlg.kind === 'history' ? tr('No modification comment is stored for this version.') : tr('No property change is stored for this version.')}</div>}
           {items.length > 0 && (
             <table className="grid-table">
-              <thead><tr><th>Date</th><th>User</th>{dlg.kind === 'props' && <><th>Property</th><th>Old value</th><th>New value</th></>}<th>{dlg.kind === 'props' ? 'Reason' : 'Comment'}</th></tr></thead>
+              <thead><tr><th>{tr('Date')}</th><th>{tr('User')}</th>{dlg.kind === 'props' && <><th>{tr('Property')}</th><th>{tr('Old value')}</th><th>{tr('New value')}</th></>}<th>{dlg.kind === 'props' ? tr('Reason') : tr('Comment')}</th></tr></thead>
               <tbody>{items.map((m, i) => (
                 <tr key={i}><td>{stamp(m.modDate)}</td><td>{m.user ?? '-'}</td>
                   {dlg.kind === 'props' && <><td>{m.propertyType ?? '-'}</td><td>{m.oldValue ?? '-'}</td><td>{m.newValue ?? '-'}</td></>}
@@ -45,7 +46,7 @@ function ListDialog({ docId, lang, dlg, onClose }: { docId: number; lang: string
             </table>
           )}
         </div>
-        <div className="modal-foot"><button className="btn-ghost" onClick={onClose}>Close</button></div>
+        <div className="modal-foot"><button className="btn-ghost" onClick={onClose}>{tr('Close')}</button></div>
       </div>
     </div>
   );
@@ -62,7 +63,7 @@ export default function ArchivesPane({ docId, lang }: { docId: number; lang: str
   useEffect(() => { setSel(null); }, [docId, lang]);
 
   if (q.isError) return <div className="error" role="alert">{(q.error as Error).message}</div>;
-  if (!q.data) return <div className="empty" style={{ height: 80 }}>Loading…</div>;
+  if (!q.data) return <div className="empty" style={{ height: 80 }}>{tr('Loading…')}</div>;
   const { canView, items } = q.data;
   const keyOf = (a: ArchiveItem, i: number) => `${ver(a)}#${i}`;
   const cur = items.find((a, i) => keyOf(a, i) === sel) ?? null;
@@ -74,15 +75,15 @@ export default function ArchivesPane({ docId, lang }: { docId: number; lang: str
     catch (e) { setMsg({ ok: false, t: (e as Error).message }); }
     finally { setBusy(false); }
   };
-  const why = !canView ? 'You need the Archive right (or Admin rights).' : !cur ? 'Select a version first.' : undefined;
+  const why = !canView ? tr('You need the Archive right (or Admin rights).') : !cur ? tr('Select a version first.') : undefined;
 
-  if (items.length === 0) return <div className="empty" style={{ height: 90 }}>No earlier version is archived yet. A version moves to the archive when a published, released or blocked document is edited or its version is changed.</div>;
+  if (items.length === 0) return <div className="empty" style={{ height: 90 }}>{tr('No earlier version is archived yet. A version moves to the archive when a published, released or blocked document is edited or its version is changed.')}</div>;
 
   return (
     <div className="arch">
       <div className="arch-grid">
         <table className="grid-table arch-table">
-          <thead><tr><th>Version</th><th>Document</th><th>Status</th><th>Date edited</th><th>Reason for edit</th></tr></thead>
+          <thead><tr><th>{tr('Version')}</th><th>{tr('Document')}</th><th>{tr('Status')}</th><th>{tr('Date edited')}</th><th>{tr('Reason for edit')}</th></tr></thead>
           <tbody>{items.map((a, i) => {
             const k = keyOf(a, i);
             return (
@@ -96,17 +97,17 @@ export default function ArchivesPane({ docId, lang }: { docId: number; lang: str
           })}</tbody>
         </table>
       </div>
-      <aside className="arch-side" aria-label="Archive actions">
+      <aside className="arch-side" aria-label={tr('Archive actions')}>
         <fieldset className="arch-view">
-          <legend>View</legend>
-          <label><input type="radio" name={`av-${docId}`} checked={view === 'pdf'} onChange={() => setView('pdf')} /> PDF</label>
-          <label><input type="radio" name={`av-${docId}`} checked={view === 'original'} onChange={() => setView('original')} /> Original</label>
+          <legend>{tr('View')}</legend>
+          <label><input type="radio" name={`av-${docId}`} checked={view === 'pdf'} onChange={() => setView('pdf')} /> {tr('PDF')}</label>
+          <label><input type="radio" name={`av-${docId}`} checked={view === 'original'} onChange={() => setView('original')} /> {tr('Original')}</label>
         </fieldset>
-        <button className="btn-primary" disabled={!canView || !cur || busy || (!!cur && !cur.hasFile)} title={why ?? (cur && !cur.hasFile ? 'The archived file is not on the server.' : 'Open this version')} onClick={() => show()}>{busy ? 'Opening…' : 'Show'}</button>
-        <button className="btn-ghost" disabled={!canView || !cur || busy || (!!cur && !cur.hasFile)} title={why ?? 'Save this version to your computer'} onClick={() => show(true)}>⬇ Save</button>
-        <button className="btn-ghost" disabled={!canView || !cur} title={why ?? 'Modification comments of this version'} onClick={() => cur && setDlg({ kind: 'history', a: cur })}>History</button>
-        <button className="btn-ghost" disabled={!canView || !cur || !cur.propChanges} title={why ?? (cur && !cur.propChanges ? 'No property change for this version' : 'Property changes of this version')} onClick={() => cur && setDlg({ kind: 'props', a: cur })}>Property Changes</button>
-        {!canView && <small className="arch-note">Show and History need the Archive right.</small>}
+        <button className="btn-primary" disabled={!canView || !cur || busy || (!!cur && !cur.hasFile)} title={why ?? (cur && !cur.hasFile ? tr('The archived file is not on the server.') : tr('Open this version'))} onClick={() => show()}>{busy ? tr('Opening…') : tr('Show')}</button>
+        <button className="btn-ghost" disabled={!canView || !cur || busy || (!!cur && !cur.hasFile)} title={why ?? tr('Save this version to your computer')} onClick={() => show(true)}>{tr('⬇ Save')}</button>
+        <button className="btn-ghost" disabled={!canView || !cur} title={why ?? tr('Modification comments of this version')} onClick={() => cur && setDlg({ kind: 'history', a: cur })}>{tr('History')}</button>
+        <button className="btn-ghost" disabled={!canView || !cur || !cur.propChanges} title={why ?? (cur && !cur.propChanges ? tr('No property change for this version') : tr('Property changes of this version'))} onClick={() => cur && setDlg({ kind: 'props', a: cur })}>{tr('Property Changes')}</button>
+        {!canView && <small className="arch-note">{tr('Show and History need the Archive right.')}</small>}
       </aside>
       {dlg && <ListDialog docId={docId} lang={lang} dlg={dlg} onClose={() => setDlg(null)} />}
       <Toast msg={msg} onClose={() => setMsg(null)} />

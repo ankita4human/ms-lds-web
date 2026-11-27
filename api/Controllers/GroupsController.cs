@@ -16,7 +16,7 @@ public class GroupsController(IConfiguration cfg, IMemoryCache cache) : Controll
     /// The document group tree for one language: only groups the user can navigate to,
     /// with the number of visible documents linked directly to each group.
     [HttpGet]
-    public async Task<IActionResult> Tree([FromQuery] string lang = "EN", [FromQuery] int? parent = null, [FromQuery] bool counts = true)
+    public async Task<IActionResult> Tree([FromQuery] string lang = "EN", [FromQuery] int? parent = null, [FromQuery] bool counts = false)
     {
         var acc = int.Parse(User.FindFirstValue("idAcc")!);
         var key = GroupCache.TreeKey(acc, lang) + (parent is null ? "" : $":p{parent}") + (counts ? "" : ":nc");   // parent = one level only (progressive loading)
@@ -29,19 +29,24 @@ public class GroupsController(IConfiguration cfg, IMemoryCache cache) : Controll
         var vis = await Access.VisibleSql(con, acc, lang);
         var levelIds = parent is null ? null : all.Where(g => g.IDParent == parent && nav.Contains(g.IDGroup)).Select(g => g.IDGroup).ToHashSet();
         var gids = (accessible ?? all.Select(g => g.IDGroup).ToHashSet()).Where(i => levelIds is null || levelIds.Contains(i)).ToArray();
-        // document counts are slow on big databases: the tree is sent without them and the page asks for them separately (groups/counts)
+        // document counts are slow on big databases: the web page no longer asks for them (counts=false); they are only calculated when counts=true is requested
         var cnt = counts ? await Counts(con, acc, lang, vis, gids) : new Dictionary<int, int>();
 
-        // properties shown in the right-click menu: web visibility, publish as original, process owner, template folder
-        var meta = (await con.QueryAsync<GroupMeta>(@"SELECT g.IDGroup AS IdGroup, CAST(ISNULL(g.DoNotPublish, 0) AS bit) AS DoNotPublish, ISNULL(g.IDProcessOwner, 0) AS IdProcessOwner,
-                CAST(CASE WHEN EXISTS (SELECT 1 FROM GroupProperties p WHERE p.IdGroup = g.IDGroup AND ISNULL(p.isPubOriginal, 0) = 1) THEN 1 ELSE 0 END AS bit) AS PubOriginal,
-                ISNULL(NULLIF(e.Name, ''), a.AccShort) AS ProcessOwner
-            FROM Groups g LEFT JOIN Accounts a ON a.IdAcc = g.IDProcessOwner LEFT JOIN EmailContact e ON e.IDEC = a.IDEC
-            WHERE g.Lang = @lang AND g.IDGroup IS NOT NULL", new { lang })).GroupBy(x => x.IdGroup).ToDictionary(x => x.Key, x => x.First());
-        var template = await con.ExecuteScalarAsync<string?>("SELECT TOP 1 FValue FROM Config WHERE FName = 'GroupTemplate'");
-        int.TryParse(template, out var templateGroup);
+        // properties shown in the right-click menu: web visibility, publish as original, process owner, template folder (same for every user: cached)
+        var (meta, templateGroup) = await Access.Cached($"gmeta:{lang}:{GroupCache.TreeKey(0, "")}", TimeSpan.FromSeconds(60), async () =>
+        {
+            var m = (await con.QueryAsync<GroupMeta>(@"SELECT g.IDGroup AS IdGroup, CAST(ISNULL(g.DoNotPublish, 0) AS bit) AS DoNotPublish, ISNULL(g.IDProcessOwner, 0) AS IdProcessOwner,
+                    CAST(CASE WHEN EXISTS (SELECT 1 FROM GroupProperties p WHERE p.IdGroup = g.IDGroup AND ISNULL(p.isPubOriginal, 0) = 1) THEN 1 ELSE 0 END AS bit) AS PubOriginal,
+                    ISNULL(NULLIF(e.Name, ''), a.AccShort) AS ProcessOwner
+                FROM Groups g LEFT JOIN Accounts a ON a.IdAcc = g.IDProcessOwner LEFT JOIN EmailContact e ON e.IDEC = a.IDEC
+                WHERE g.Lang = @lang AND g.IDGroup IS NOT NULL", new { lang })).GroupBy(x => x.IdGroup).ToDictionary(x => x.Key, x => x.First());
+            var template = await con.ExecuteScalarAsync<string?>("SELECT TOP 1 FValue FROM Config WHERE FName = 'GroupTemplate'");
+            int.TryParse(template, out var tg);
+            return (m, tg);
+        });
         var rights = await Access.Rights(con, acc);
 
+        var parentsWithKids = all.Where(x => nav.Contains(x.IDGroup)).Select(x => x.IDParent).ToHashSet();   // computed once: no scan of all groups per group
         var groups = all.Where(g => nav.Contains(g.IDGroup) && (levelIds is null || levelIds.Contains(g.IDGroup))).OrderBy(g => g.SortG).ThenBy(g => g.GroupDesc)
             .Select(g =>
             {
@@ -50,7 +55,7 @@ public class GroupsController(IConfiguration cfg, IMemoryCache cache) : Controll
                 {
                     idGroup = g.IDGroup, idParent = g.IDParent, name = g.GroupDesc ?? $"Group {g.IDGroup}", sort = g.SortG, groupType = g.GroupType,
                     docCount = cnt.GetValueOrDefault(g.IDGroup), accessible = accessible is null || accessible.Contains(g.IDGroup),
-                    hasChildren = all.Any(x => x.IDParent == g.IDGroup && nav.Contains(x.IDGroup)),
+                    hasChildren = parentsWithKids.Contains(g.IDGroup),
                     doNotPublish = m?.DoNotPublish ?? false, pubOriginal = m?.PubOriginal ?? false,
                     idProcessOwner = m?.IdProcessOwner ?? 0, processOwner = m?.ProcessOwner
                 };
